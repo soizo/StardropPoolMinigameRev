@@ -41,7 +41,7 @@ namespace StardropPoolMinigameRev
                 return;
             }
 
-            if (Game1.currentLocation == null || !PoolTableDetector.IsInteractingWithPoolTable(Game1.player, Game1.currentLocation))
+            if (Game1.currentLocation == null || !PoolTableDetector.IsInteractingWithPoolTable(Game1.player, Game1.currentLocation, Helper.Input.GetCursorPosition().GrabTile))
             {
                 return;
             }

@@ -13,9 +13,10 @@ namespace StardropPoolMinigameRev
     internal sealed class StardropPoolMinigameRev : IMinigame
     {
         private readonly StardropPoolAssets _assets;
-        private readonly IMinigameScene _scene;
+        private IMinigameScene _scene;
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
+        private readonly string? _previousMusicTrack;
 
         public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor)
         {
@@ -29,6 +30,8 @@ namespace StardropPoolMinigameRev
             _assets.Load();
 
             _scene = new MainMenuScene(_monitor);
+            _previousMusicTrack = Game1.currentSong?.Name;
+            Game1.changeMusicTrack("movieTheater");
 
             _monitor.Log($"Stardrop Pool rewrite minigame ready. Viewport scale {_viewport.Scale}, top-left {_viewport.TopLeft}.", LogLevel.Info);
         }
@@ -37,7 +40,28 @@ namespace StardropPoolMinigameRev
         {
             _viewport.Update();
             _scene.Update(time);
+
+            if (_scene.PendingTransition != SceneId.None)
+            {
+                TransitionTo(_scene.PendingTransition);
+            }
+
             return false;
+        }
+
+        private void TransitionTo(SceneId target)
+        {
+            switch (target)
+            {
+                case SceneId.Game:
+                    _monitor.Log("Transitioning to game scene.", LogLevel.Info);
+                    _scene = new GameScene(_monitor);
+                    break;
+                case SceneId.MainMenu:
+                    _monitor.Log("Transitioning to main menu.", LogLevel.Info);
+                    _scene = new MainMenuScene(_monitor);
+                    break;
+            }
         }
 
         public void draw(SpriteBatch batch)
@@ -131,6 +155,7 @@ namespace StardropPoolMinigameRev
         public void unload()
         {
             _monitor.Log("Unloading Stardrop Pool rewrite minigame.", LogLevel.Info);
+            Game1.changeMusicTrack(_previousMusicTrack ?? "none");
         }
 
         public void receiveEventPoke(int data)

@@ -18,7 +18,7 @@ namespace StardropPoolMinigameRev
 			1415, 1416, 1417, 1418, 1419
 		};
 
-		public static bool IsInteractingWithPoolTable(Farmer player, GameLocation location)
+		public static bool IsInteractingWithPoolTable(Farmer player, GameLocation location, Vector2 cursorTile)
 		{
 			if (location.NameOrUniqueName != "Saloon")
 			{
@@ -26,14 +26,12 @@ namespace StardropPoolMinigameRev
 			}
 
 			Vector2 grabTile = player.GetGrabTile();
-			int x = (int)grabTile.X;
-			int y = (int)grabTile.Y;
+			if (IsPoolTableTile(location, (int)grabTile.X, (int)grabTile.Y))
+			{
+				return true;
+			}
 
-			return IsPoolTableTile(location, x, y)
-				|| IsPoolTableTile(location, x - 1, y)
-				|| IsPoolTableTile(location, x + 1, y)
-				|| IsPoolTableTile(location, x, y - 1)
-				|| IsPoolTableTile(location, x, y + 1);
+			return IsPoolTableTile(location, (int)cursorTile.X, (int)cursorTile.Y);
 		}
 
 		private static bool IsPoolTableTile(GameLocation location, int x, int y)

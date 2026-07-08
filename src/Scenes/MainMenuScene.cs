@@ -9,8 +9,17 @@ using StardropPoolMinigameRev.Rendering;
 
 namespace StardropPoolMinigameRev.Scenes
 {
+	internal enum SceneId
+	{
+		None,
+		MainMenu,
+		Game
+	}
+
 	internal interface IMinigameScene
 	{
+		SceneId PendingTransition { get; }
+
 		void Update(GameTime time);
 
 		void Draw(SpriteBatch batch, MinigameViewport viewport, StardropPoolAssets assets);
@@ -48,6 +57,8 @@ namespace StardropPoolMinigameRev.Scenes
 		private readonly IMonitor _monitor;
 		private int? _pressedButtonIndex;
 		private Vector2? _lastClick;
+
+		public SceneId PendingTransition { get; private set; }
 
 		public MainMenuScene(IMonitor monitor)
 		{
@@ -90,7 +101,14 @@ namespace StardropPoolMinigameRev.Scenes
 		{
 			if (_pressedButtonIndex.HasValue)
 			{
-				_monitor.Log($"Main menu released {Items[_pressedButtonIndex.Value].Label}.", LogLevel.Info);
+				int index = _pressedButtonIndex.Value;
+				_monitor.Log($"Main menu released {Items[index].Label}.", LogLevel.Info);
+
+				if (index == 0)
+				{
+					PendingTransition = SceneId.Game;
+				}
+
 				_pressedButtonIndex = null;
 			}
 		}
