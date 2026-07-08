@@ -1,0 +1,10 @@
+{
+  "Name": "Stardrop Pool Minigame Rev",
+  "Author": "andyruwruw",
+  "Version": "1.0.0",
+  "Description": "Adds a stardrop pool minigame.",
+  "UniqueID": "soizo.StardropPoolMinigameRev",
+  "EntryDll": "StardropPoolMinigameRev.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}

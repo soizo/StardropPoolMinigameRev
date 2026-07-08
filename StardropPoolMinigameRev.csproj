@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableModDeploy>false</EnableModDeploy>
+    <EnableModZip>false</EnableModZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="archived/**" />
+    <EmbeddedResource Remove="archived/**" />
+    <None Remove="archived/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.2" />
+  </ItemGroup>
+
+</Project>

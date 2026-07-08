@@ -1,0 +1,12 @@
+{
+  "Name": "Stardrop Pool Minigame Rev CP",
+  "Author": "andyruwruw",
+  "Version": "1.0.0",
+  "Description": "Content Patcher assets for Stardrop Pool Minigame Rev.",
+  "UniqueID": "soizo.StardropPoolMinigameRevCP",
+  "MinimumApiVersion": "3.0",
+  "UpdateKeys": [],
+  "ContentPackFor": {
+    "UniqueID": "Pathoschild.ContentPatcher"
+  }
+}
