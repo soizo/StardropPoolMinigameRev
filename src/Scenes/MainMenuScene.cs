@@ -17,6 +17,8 @@ namespace StardropPoolMinigameRev.Scenes
 
 		void ReceiveLeftClick(Vector2 logicalPosition);
 
+		void ReleaseLeftClick(Vector2 logicalPosition);
+
 		void ReceiveRightClick(Vector2 logicalPosition);
 
 		void ReceiveKeyPress(Keys key);
@@ -44,6 +46,7 @@ namespace StardropPoolMinigameRev.Scenes
 		};
 
 		private readonly IMonitor _monitor;
+		private int? _pressedButtonIndex;
 		private Vector2? _lastClick;
 
 		public MainMenuScene(IMonitor monitor)
@@ -70,7 +73,26 @@ namespace StardropPoolMinigameRev.Scenes
 		public void ReceiveLeftClick(Vector2 logicalPosition)
 		{
 			_lastClick = logicalPosition;
+
+			int buttonIndex = GetButtonIndexAt(logicalPosition);
+			if (buttonIndex >= 0)
+			{
+				_pressedButtonIndex = buttonIndex;
+				Game1.playSound("smallSelect");
+				_monitor.Log($"Main menu pressed {Items[buttonIndex].Label}.", LogLevel.Info);
+				return;
+			}
+
 			_monitor.Log($"Main menu left click at logical {Format(logicalPosition)}.", LogLevel.Info);
+		}
+
+		public void ReleaseLeftClick(Vector2 logicalPosition)
+		{
+			if (_pressedButtonIndex.HasValue)
+			{
+				_monitor.Log($"Main menu released {Items[_pressedButtonIndex.Value].Label}.", LogLevel.Info);
+				_pressedButtonIndex = null;
+			}
 		}
 
 		public void ReceiveRightClick(Vector2 logicalPosition)
@@ -110,25 +132,54 @@ namespace StardropPoolMinigameRev.Scenes
 			batch.Draw(assets.Tilesheet, new Rectangle(x, y, source.Width, source.Height), source, Color.White);
 		}
 
-		private static void DrawButtons(SpriteBatch batch, StardropPoolAssets assets)
+		private void DrawButtons(SpriteBatch batch, StardropPoolAssets assets)
 		{
 			SpriteFont buttonFont = GetButtonFont();
-			int buttonWidth = GetButtonWidth(buttonFont);
-			int groupHeight = Items.Length * ButtonHeight + (Items.Length - 1) * ButtonGap;
-			int availableHeight = MinigameViewport.LogicalHeight - BarBackgroundHeight;
-			int x = (MinigameViewport.LogicalWidth - buttonWidth) / 2;
-			int startY = BarBackgroundHeight + (availableHeight - groupHeight) / 2;
+			Rectangle[] buttonBounds = GetButtonBounds(buttonFont);
 
 			for (int i = 0; i < Items.Length; i++)
 			{
-				int y = startY + i * (ButtonHeight + ButtonGap);
-				DrawButton(batch, assets, Items[i], new Rectangle(x, y, buttonWidth, ButtonHeight), buttonFont);
+				DrawButton(batch, assets, Items[i], buttonBounds[i], buttonFont, _pressedButtonIndex == i);
 			}
 		}
 
 		private static SpriteFont GetButtonFont()
 		{
 			return Game1.dialogueFont;
+		}
+
+		private static Rectangle[] GetButtonBounds(SpriteFont font)
+		{
+			int buttonWidth = GetButtonWidth(font);
+			int groupHeight = Items.Length * ButtonHeight + (Items.Length - 1) * ButtonGap;
+			int availableHeight = MinigameViewport.LogicalHeight - BarBackgroundHeight;
+			int x = (MinigameViewport.LogicalWidth - buttonWidth) / 2;
+			int startY = BarBackgroundHeight + (availableHeight - groupHeight) / 2;
+			Rectangle[] bounds = new Rectangle[Items.Length];
+
+			for (int i = 0; i < Items.Length; i++)
+			{
+				int y = startY + i * (ButtonHeight + ButtonGap);
+				bounds[i] = new Rectangle(x, y, buttonWidth, ButtonHeight);
+			}
+
+			return bounds;
+		}
+
+		private int GetButtonIndexAt(Vector2 logicalPosition)
+		{
+			Rectangle[] buttonBounds = GetButtonBounds(GetButtonFont());
+			Point point = new((int)MathF.Floor(logicalPosition.X), (int)MathF.Floor(logicalPosition.Y));
+
+			for (int i = 0; i < buttonBounds.Length; i++)
+			{
+				if (buttonBounds[i].Contains(point))
+				{
+					return i;
+				}
+			}
+
+			return -1;
 		}
 
 		private static int GetButtonWidth(SpriteFont font)
@@ -143,8 +194,15 @@ namespace StardropPoolMinigameRev.Scenes
 			return Math.Max(96, contentWidth);
 		}
 
-		private static void DrawButton(SpriteBatch batch, StardropPoolAssets assets, MenuItem item, Rectangle bounds, SpriteFont font)
+		private static void DrawButton(SpriteBatch batch, StardropPoolAssets assets, MenuItem item, Rectangle bounds, SpriteFont font, bool isPressed)
 		{
+			Color outerColour = isPressed ? new Color(22, 11, 19) : new Color(30, 15, 25);
+			Color bevelColour = isPressed ? new Color(82, 45, 48) : new Color(120, 72, 62);
+			Color innerColour = isPressed ? new Color(52, 27, 37) : new Color(69, 38, 45);
+			Color topHighlightColour = isPressed ? new Color(38, 20, 31) : new Color(172, 111, 83);
+			Color leftHighlightColour = isPressed ? new Color(46, 24, 34) : new Color(143, 84, 72);
+			Color bottomShadeColour = isPressed ? new Color(117, 70, 61) : new Color(35, 18, 31);
+
 			Rectangle shadow = new Rectangle(bounds.X + 2, bounds.Y + 2, bounds.Width, bounds.Height);
 			Rectangle outer = bounds;
 			Rectangle bevel = new Rectangle(bounds.X + 1, bounds.Y + 1, bounds.Width - 2, bounds.Height - 2);
@@ -153,13 +211,13 @@ namespace StardropPoolMinigameRev.Scenes
 			Rectangle leftHighlight = new Rectangle(bounds.X + 2, bounds.Y + 2, 1, bounds.Height - 4);
 			Rectangle bottomShade = new Rectangle(bounds.X + 2, bounds.Bottom - 3, bounds.Width - 4, 1);
 
-			batch.Draw(Game1.staminaRect, shadow, Game1.staminaRect.Bounds, Color.Black * 0.4f);
-			batch.Draw(Game1.staminaRect, outer, Game1.staminaRect.Bounds, new Color(30, 15, 25));
-			batch.Draw(Game1.staminaRect, bevel, Game1.staminaRect.Bounds, new Color(120, 72, 62));
-			batch.Draw(Game1.staminaRect, inner, Game1.staminaRect.Bounds, new Color(69, 38, 45));
-			batch.Draw(Game1.staminaRect, topHighlight, Game1.staminaRect.Bounds, new Color(172, 111, 83));
-			batch.Draw(Game1.staminaRect, leftHighlight, Game1.staminaRect.Bounds, new Color(143, 84, 72));
-			batch.Draw(Game1.staminaRect, bottomShade, Game1.staminaRect.Bounds, new Color(35, 18, 31));
+			batch.Draw(Game1.staminaRect, shadow, Game1.staminaRect.Bounds, Color.Black * (isPressed ? 0.25f : 0.4f));
+			batch.Draw(Game1.staminaRect, outer, Game1.staminaRect.Bounds, outerColour);
+			batch.Draw(Game1.staminaRect, bevel, Game1.staminaRect.Bounds, bevelColour);
+			batch.Draw(Game1.staminaRect, inner, Game1.staminaRect.Bounds, innerColour);
+			batch.Draw(Game1.staminaRect, topHighlight, Game1.staminaRect.Bounds, topHighlightColour);
+			batch.Draw(Game1.staminaRect, leftHighlight, Game1.staminaRect.Bounds, leftHighlightColour);
+			batch.Draw(Game1.staminaRect, bottomShade, Game1.staminaRect.Bounds, bottomShadeColour);
 
 			Rectangle iconBounds = new Rectangle(bounds.X + ButtonIconInset, bounds.Y + (bounds.Height - ButtonIconWidth) / 2 + ButtonIconYOffset, ButtonIconWidth, ButtonIconWidth);
 			batch.Draw(assets.Tilesheet, iconBounds, item.BallSource, Color.White);

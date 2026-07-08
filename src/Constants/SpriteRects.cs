@@ -17,9 +17,12 @@ namespace StardropPoolMinigameRev.Constants
 
             public static class Base
             {
+                public static readonly Microsoft.Xna.Framework.Rectangle White = new(320, 144, 16, 16);
                 public static readonly Microsoft.Xna.Framework.Rectangle Yellow = new(336, 144, 16, 16);
                 public static readonly Microsoft.Xna.Framework.Rectangle Blue = new(352, 144, 16, 16);
                 public static readonly Microsoft.Xna.Framework.Rectangle Red = new(368, 144, 16, 16);
+                public static readonly Microsoft.Xna.Framework.Rectangle Orange = new(320, 160, 16, 16);
+                public static readonly Microsoft.Xna.Framework.Rectangle Maroon = new(352, 160, 16, 16);
             }
         }
     }

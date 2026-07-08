@@ -72,6 +72,12 @@ namespace StardropPoolMinigameRev
 
         public void releaseLeftClick(int x, int y)
         {
+            Vector2 logical = _viewport.RawToLogical(x, y);
+
+            if (_viewport.ContainsLogical(logical))
+            {
+                _scene.ReleaseLeftClick(logical);
+            }
         }
 
         public void receiveRightClick(int x, int y, bool playSound = true)

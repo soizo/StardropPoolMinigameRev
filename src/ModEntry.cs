@@ -9,16 +9,30 @@ namespace StardropPoolMinigameRev
         public override void Entry(IModHelper helper)
         {
             helper.Events.Input.ButtonPressed += OnButtonPressed;
+            helper.Events.Input.ButtonsChanged += OnButtonsChanged;
             Monitor.Log("Stardrop Pool Minigame Rev loaded.", LogLevel.Info);
         }
 
+        [EventPriority(EventPriority.High)]
         private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
         {
-            Monitor.Log($"ButtonPressed: {e.Button}, IsWorldReady: {Context.IsWorldReady}", LogLevel.Info);
+            if (Game1.currentMinigame is StardropPoolMinigameRev)
+            {
+                if (IsShortcutButton(e.Button))
+                {
+                    Helper.Input.Suppress(e.Button);
+                }
+
+                return;
+            }
 
             if (!Context.IsWorldReady)
             {
-                Monitor.Log("World not ready, ignoring input.", LogLevel.Info);
+                return;
+            }
+
+            if (Game1.currentMinigame != null)
+            {
                 return;
             }
 
@@ -27,25 +41,41 @@ namespace StardropPoolMinigameRev
                 return;
             }
 
-            Microsoft.Xna.Framework.Vector2 playerTile = Game1.player.Tile;
-            Microsoft.Xna.Framework.Vector2 facingTile = Game1.player.GetGrabTile();
-            string objectName = "(none)";
-            if (Game1.currentLocation != null)
+            if (Game1.currentLocation == null || !PoolTableDetector.IsInteractingWithPoolTable(Game1.player, Game1.currentLocation))
             {
-                StardewValley.Object obj = Game1.currentLocation.getObjectAtTile((int)facingTile.X, (int)facingTile.Y);
-                if (obj != null)
-                {
-                    objectName = obj.Name ?? obj.DisplayName ?? "(unnamed)";
-                }
+                return;
             }
 
-            Monitor.Log($"Action button pressed. Player tile: {playerTile}, facing tile: {facingTile}, object: {objectName}", LogLevel.Info);
+            Helper.Input.Suppress(e.Button);
             StartGame();
+        }
+
+        private void OnButtonsChanged(object? sender, ButtonsChangedEventArgs e)
+        {
+            if (Game1.currentMinigame is not StardropPoolMinigameRev)
+            {
+                return;
+            }
+
+            foreach (SButton button in e.Pressed)
+            {
+                if (IsShortcutButton(button))
+                {
+                    Helper.Input.Suppress(button);
+                }
+            }
+        }
+
+        private static bool IsShortcutButton(SButton button)
+        {
+            return button != SButton.Escape
+                && !button.IsUseToolButton()
+                && !button.IsActionButton();
         }
 
         private void StartGame()
         {
-            Monitor.Log("Starting Stardrop Pool minigame.", LogLevel.Info);
+            Monitor.Log("Starting Stardrop Pool minigame from pool table interaction.", LogLevel.Info);
             Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor);
         }
     }
