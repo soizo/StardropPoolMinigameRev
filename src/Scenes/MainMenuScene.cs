@@ -26,6 +26,8 @@ namespace StardropPoolMinigameRev.Scenes
 
 		void ReceiveLeftClick(Vector2 logicalPosition);
 
+		void LeftClickHeld(Vector2 logicalPosition);
+
 		void ReleaseLeftClick(Vector2 logicalPosition);
 
 		void ReceiveRightClick(Vector2 logicalPosition);
@@ -95,6 +97,10 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 
 			_monitor.Log($"Main menu left click at logical {Format(logicalPosition)}.", LogLevel.Info);
+		}
+
+		public void LeftClickHeld(Vector2 logicalPosition)
+		{
 		}
 
 		public void ReleaseLeftClick(Vector2 logicalPosition)
