@@ -5,6 +5,7 @@ using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Minigames;
 using StardropPoolMinigameRev.Assets;
+using StardropPoolMinigameRev.Constants;
 using StardropPoolMinigameRev.Rendering;
 using StardropPoolMinigameRev.Scenes;
 
@@ -66,6 +67,8 @@ namespace StardropPoolMinigameRev
 
         public void draw(SpriteBatch batch)
         {
+            DrawRawFloorBackground(batch);
+
             batch.Begin(
                 SpriteSortMode.Deferred,
                 BlendState.AlphaBlend,
@@ -76,6 +79,26 @@ namespace StardropPoolMinigameRev
                 _viewport.Transform
             );
             _scene.Draw(batch, _viewport, _assets);
+            batch.End();
+        }
+
+        private void DrawRawFloorBackground(SpriteBatch batch)
+        {
+            Rectangle floor = SpriteRects.Environment.FloorTiles;
+            int viewportWidth = Game1.game1.localMultiplayerWindow.Width;
+            int viewportHeight = Game1.game1.localMultiplayerWindow.Height;
+            int tileWidth = Math.Max(1, (int)MathF.Ceiling(floor.Width * _viewport.Scale));
+            int tileHeight = Math.Max(1, (int)MathF.Ceiling(floor.Height * _viewport.Scale));
+
+            batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+            for (int y = 0; y < viewportHeight; y += tileHeight)
+            {
+                for (int x = 0; x < viewportWidth; x += tileWidth)
+                {
+                    batch.Draw(_assets.Tilesheet, new Rectangle(x, y, tileWidth, tileHeight), floor, Color.White);
+                }
+            }
+
             batch.End();
         }
 
