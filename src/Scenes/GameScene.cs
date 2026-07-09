@@ -15,7 +15,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const int TableColumns = 12;
 		private const int TableRows = 6;
 		private const int TableLeft = (MinigameViewport.LogicalWidth - TableColumns * TableSegmentSize) / 2;
-		private const int TableTop = (MinigameViewport.LogicalHeight - TableHeight) / 2;
+		private const int TableTop = (MinigameViewport.LogicalHeight - TableHeight) / 2 + 6;
 		private const int TableWidth = TableColumns * TableSegmentSize;
 		private const int TableHeight = TableRows * TableSegmentSize;
 		private const int TableCollisionInset = 16;
@@ -49,6 +49,11 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float WallRestitution = 0.92f;
 		private const float BallRestitution = 0.96f;
 		private const float StopSpeed = 5f;
+		private const float MinimumWallImpactSpeed = 12f;
+		private const float MinimumBallImpactSpeed = 8f;
+		private const float MediumImpactSpeed = 24f;
+		private const float MinimumImpactVolume = 0.35f;
+		private const float MaximumImpactVolume = 1f;
 		private const float PocketRadius = 8f;
 		private const float CueStickTouchDistance = BallCollisionRadius + 5f;
 		private const float CueStickPullDistance = 32f;
@@ -59,7 +64,13 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float CueStickRestOffset = 4f;
 		private const float CueStickOriginX = 122f;
 		private const float CueStickOriginY = 8f;
-		private static readonly Rectangle ResetButtonBounds = new(8, 6, 16, 16);
+		private static readonly Point ButtonColumnOrigin = new(10, 6);
+		private static readonly Point ButtonColumnItemSize = new(16, 16);
+		private const int ButtonColumnItemSpacing = 2;
+		private const float ButtonHoverExpansion = 1.5f;
+		private const float RowElementScaleStep = 0.02f;
+		private static readonly Rectangle ResetButtonBounds = GetButtonColumnItemBounds(0);
+		private static readonly Rectangle BackToMenuButtonBounds = GetButtonColumnItemBounds(1);
 
 		private static readonly Color AimLineColour = new(255, 238, 209);
 		private static readonly Color AimLineShadowColour = new(25, 11, 16);
@@ -92,6 +103,13 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private readonly IMonitor _monitor;
 		private readonly List<PoolBall> _balls = new();
+		private readonly List<RowElement> _rowElements = new();
+		private readonly Dictionary<int, float> _rowElementScales = new();
+		private readonly bool _isSveInstalled;
+		private MinigameViewport? _viewport;
+		private bool _isGaldoraTheme;
+		private bool _isPressingRowElement;
+		private int _pressedRowElementIndex = -1;
 		private bool _isAiming;
 		private Vector2 _aimStartPosition;
 		private Vector2 _aimPosition;
@@ -107,9 +125,12 @@ namespace StardropPoolMinigameRev.Scenes
 		private int _pocketed;
 		private double _scratchMessageMilliseconds;
 
-		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot)
+		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot, bool isSveInstalled)
 		{
 			_monitor = monitor;
+			_isSveInstalled = isSveInstalled;
+			_isGaldoraTheme = DetectGaldoraTheme();
+			InitialiseRowElements();
 			ResetRack();
 			LoadSnapshot(snapshot);
 		}
@@ -123,6 +144,14 @@ namespace StardropPoolMinigameRev.Scenes
 		public void Update(GameTime time)
 		{
 			float dt = Math.Min((float)time.ElapsedGameTime.TotalSeconds, 1f / 30f);
+			bool isGaldoraTheme = DetectGaldoraTheme();
+			if (_isGaldoraTheme != isGaldoraTheme)
+			{
+				_isGaldoraTheme = isGaldoraTheme;
+				InitialiseRowElements();
+			}
+
+			UpdateRowElementScales();
 			if (_scratchMessageMilliseconds > 0)
 			{
 				_scratchMessageMilliseconds = Math.Max(0, _scratchMessageMilliseconds - time.ElapsedGameTime.TotalMilliseconds);
@@ -148,6 +177,7 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void Draw(SpriteBatch batch, MinigameViewport viewport, StardropPoolAssets assets)
 		{
+			_viewport = viewport;
 			DrawBackground(batch, assets);
 			DrawFeltSurface(batch, assets);
 			DrawTableBack(batch, assets);
@@ -159,10 +189,16 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void ReceiveLeftClick(Vector2 logicalPosition)
 		{
-			if (IsPointInResetButton(logicalPosition))
+			int rowElementIndex = GetRowElementIndexAt(logicalPosition);
+			if (rowElementIndex >= 0)
 			{
-				ResetTable();
-				Game1.playSound("bigDeSelect");
+				RowElement rowElement = _rowElements[rowElementIndex];
+				if (rowElement.Type == RowElementType.Button || rowElement.Type == RowElementType.Arrow)
+				{
+					_isPressingRowElement = true;
+					_pressedRowElementIndex = rowElementIndex;
+				}
+
 				return;
 			}
 
@@ -188,6 +224,19 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void ReleaseLeftClick(Vector2 logicalPosition)
 		{
+			if (_isPressingRowElement)
+			{
+				int rowElementIndex = GetRowElementIndexAt(logicalPosition);
+				if (rowElementIndex == _pressedRowElementIndex && rowElementIndex >= 0)
+				{
+					ActivateRowElement(_rowElements[rowElementIndex]);
+				}
+
+				_isPressingRowElement = false;
+				_pressedRowElementIndex = -1;
+				return;
+			}
+
 			if (!_isAiming)
 			{
 				return;
@@ -424,28 +473,44 @@ namespace StardropPoolMinigameRev.Scenes
 		{
 			if (ball.Position.X - BallCollisionRadius < CollisionLeft)
 			{
+				float impactSpeed = Math.Abs(ball.Velocity.X);
 				ball.Position = new Vector2(CollisionLeft + BallCollisionRadius, ball.Position.Y);
 				ball.Velocity = new Vector2(Math.Abs(ball.Velocity.X) * WallRestitution, ball.Velocity.Y);
-				Game1.playSound("thudStep");
+				if (impactSpeed >= MinimumWallImpactSpeed)
+				{
+					PlayImpactSound("thudStep", impactSpeed, MinimumWallImpactSpeed);
+				}
 			}
 			else if (ball.Position.X + BallCollisionRadius > CollisionRight)
 			{
+				float impactSpeed = Math.Abs(ball.Velocity.X);
 				ball.Position = new Vector2(CollisionRight - BallCollisionRadius, ball.Position.Y);
 				ball.Velocity = new Vector2(-Math.Abs(ball.Velocity.X) * WallRestitution, ball.Velocity.Y);
-				Game1.playSound("thudStep");
+				if (impactSpeed >= MinimumWallImpactSpeed)
+				{
+					PlayImpactSound("thudStep", impactSpeed, MinimumWallImpactSpeed);
+				}
 			}
 
 			if (ball.Position.Y - BallCollisionRadius < CollisionTop)
 			{
+				float impactSpeed = Math.Abs(ball.Velocity.Y);
 				ball.Position = new Vector2(ball.Position.X, CollisionTop + BallCollisionRadius);
 				ball.Velocity = new Vector2(ball.Velocity.X, Math.Abs(ball.Velocity.Y) * WallRestitution);
-				Game1.playSound("thudStep");
+				if (impactSpeed >= MinimumWallImpactSpeed)
+				{
+					PlayImpactSound("thudStep", impactSpeed, MinimumWallImpactSpeed);
+				}
 			}
 			else if (ball.Position.Y + BallCollisionRadius > CollisionBottom)
 			{
+				float impactSpeed = Math.Abs(ball.Velocity.Y);
 				ball.Position = new Vector2(ball.Position.X, CollisionBottom - BallCollisionRadius);
 				ball.Velocity = new Vector2(ball.Velocity.X, -Math.Abs(ball.Velocity.Y) * WallRestitution);
-				Game1.playSound("thudStep");
+				if (impactSpeed >= MinimumWallImpactSpeed)
+				{
+					PlayImpactSound("thudStep", impactSpeed, MinimumWallImpactSpeed);
+				}
 			}
 		}
 
@@ -494,7 +559,10 @@ namespace StardropPoolMinigameRev.Scenes
 					Vector2 impulse = impulseMagnitude * normal;
 					first.Velocity -= impulse;
 					second.Velocity += impulse;
-					Game1.playSound("stoneStep");
+					if (impulseMagnitude >= MinimumBallImpactSpeed)
+					{
+						PlayImpactSound("stoneStep", impulseMagnitude, MinimumBallImpactSpeed);
+					}
 				}
 			}
 		}
@@ -835,13 +903,207 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private void DrawHud(SpriteBatch batch, StardropPoolAssets assets)
 		{
-			batch.Draw(assets.Tilesheet, ResetButtonBounds, SpriteRects.Ui.Reset, Color.White);
+			foreach (RowElement rowElement in _rowElements)
+			{
+				DrawRowElement(batch, assets, rowElement);
+			}
 		}
 
-		private static bool IsPointInResetButton(Vector2 logicalPosition)
+		private void InitialiseRowElements()
 		{
-			Point point = new((int)MathF.Floor(logicalPosition.X), (int)MathF.Floor(logicalPosition.Y));
-			return ResetButtonBounds.Contains(point);
+			_rowElements.Clear();
+			_rowElements.Add(new RowElement(0, RowElementType.Button, GetResetButtonSource(), ResetButtonBounds, ResetTable));
+			_rowElements.Add(new RowElement(1, RowElementType.Button, GetBackToMenuButtonSource(), BackToMenuButtonBounds, ReturnToMainMenu));
+			_rowElements.Sort((left, right) => left.Index.CompareTo(right.Index));
+			_rowElementScales.Clear();
+			for (int i = 0; i < _rowElements.Count; i++)
+			{
+				_rowElementScales[i] = 1f;
+			}
+		}
+
+		private void UpdateRowElementScales()
+		{
+			Vector2 pointerLogicalPosition = GetCurrentPointerLogicalPosition();
+			for (int i = 0; i < _rowElements.Count; i++)
+			{
+				RowElement rowElement = _rowElements[i];
+				bool isHovered = rowElement.Bounds.Contains(ToPoint(pointerLogicalPosition));
+				bool isPressed = _isPressingRowElement && _pressedRowElementIndex == i;
+				float targetScale = GetTargetRowElementScale(rowElement, isHovered, isPressed);
+				float currentScale = _rowElementScales.TryGetValue(i, out float scale) ? scale : 1f;
+				_rowElementScales[i] = Approach(currentScale, targetScale, RowElementScaleStep);
+			}
+		}
+
+		private Vector2 GetCurrentPointerLogicalPosition()
+		{
+			MouseState mouse = Mouse.GetState();
+			if (_viewport != null)
+			{
+				return _viewport.RawToLogical(mouse.X, mouse.Y);
+			}
+
+			return new Vector2(mouse.X, mouse.Y);
+		}
+
+		private Rectangle GetResetButtonSource()
+		{
+			return _isGaldoraTheme ? SpriteRects.Ui.ResetGaldora : SpriteRects.Ui.Reset;
+		}
+
+		private Rectangle GetBackToMenuButtonSource()
+		{
+			return _isGaldoraTheme ? SpriteRects.Ui.BackToMenuGaldora : SpriteRects.Ui.BackToMenu;
+		}
+
+		private void DrawRowElement(SpriteBatch batch, StardropPoolAssets assets, RowElement rowElement)
+		{
+			Color tint = GetRowElementTint(rowElement);
+			float scale = GetRowElementScale(rowElement);
+			Vector2 origin = new(rowElement.Source.Width / 2f, rowElement.Source.Height / 2f);
+			Vector2 position = new(
+				rowElement.Bounds.X + rowElement.Bounds.Width / 2f,
+				rowElement.Bounds.Y + rowElement.Bounds.Height / 2f
+			);
+			batch.Draw(assets.Tilesheet, position, rowElement.Source, tint, 0f, origin, scale, SpriteEffects.None, 1f);
+		}
+
+		private Color GetRowElementTint(RowElement rowElement)
+		{
+			if (rowElement.Type == RowElementType.Button && _isGaldoraTheme)
+			{
+				return new Color(255, 244, 214);
+			}
+
+			return Color.White;
+		}
+
+		private float GetRowElementScale(RowElement rowElement)
+		{
+			int index = _rowElements.IndexOf(rowElement);
+			if (index < 0)
+			{
+				return 1f;
+			}
+
+			return _rowElementScales.TryGetValue(index, out float scale) ? scale : 1f;
+		}
+
+		private static float GetTargetRowElementScale(RowElement rowElement, bool isHovered, bool isPressed)
+		{
+			return rowElement.Type switch
+			{
+				RowElementType.Button when isHovered => 1f + ButtonHoverExpansion / rowElement.Bounds.Width,
+				RowElementType.Arrow when isPressed => Math.Max(0.1f, 1f - 1f / rowElement.Bounds.Width),
+				_ => 1f
+			};
+		}
+
+		private int GetRowElementIndexAt(Vector2 logicalPosition)
+		{
+			Point point = ToPoint(logicalPosition);
+			for (int i = 0; i < _rowElements.Count; i++)
+			{
+				if (_rowElements[i].Bounds.Contains(point))
+				{
+					return i;
+				}
+			}
+
+			return -1;
+		}
+
+		private void ActivateRowElement(RowElement rowElement)
+		{
+			rowElement.OnActivate?.Invoke();
+			if (rowElement.Type == RowElementType.Button)
+			{
+				Game1.playSound("bigDeSelect");
+			}
+		}
+
+		private void ReturnToMainMenu()
+		{
+			PendingTransition = SceneId.MainMenu;
+		}
+
+		private bool DetectGaldoraTheme()
+		{
+			if (!_isSveInstalled)
+			{
+				return false;
+			}
+
+			const string sveConfigPath = "/Users/soizoktantas/Library/Application Support/Steam/steamapps/common/Stardew Valley/Contents/MacOS/Mods/Stardew Valley Expanded/[CP] Stardew Valley Expanded/config.json";
+			try
+			{
+				if (!File.Exists(sveConfigPath))
+				{
+					return false;
+				}
+
+				string json = File.ReadAllText(sveConfigPath);
+				return json.Contains("\"UseGaldoranThemeAllTimes\": \"true\"", StringComparison.OrdinalIgnoreCase)
+					&& !json.Contains("\"DisableGaldoranTheme\": \"true\"", StringComparison.OrdinalIgnoreCase);
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		private static Point ToPoint(Vector2 logicalPosition)
+		{
+			return new Point((int)MathF.Floor(logicalPosition.X), (int)MathF.Floor(logicalPosition.Y));
+		}
+
+		private static float Approach(float current, float target, float amount)
+		{
+			if (current < target)
+			{
+				return Math.Min(current + amount, target);
+			}
+
+			if (current > target)
+			{
+				return Math.Max(current - amount, target);
+			}
+
+			return target;
+		}
+
+		private static float GetImpactVolume(float impactSpeed, float minimumImpactSpeed)
+		{
+			float t = (impactSpeed - minimumImpactSpeed) / (MediumImpactSpeed - minimumImpactSpeed);
+			return MathHelper.Lerp(MinimumImpactVolume, MaximumImpactVolume, MathHelper.Clamp(t, 0f, 1f));
+		}
+
+		private static void PlayImpactSound(string cueName, float impactSpeed, float minimumImpactSpeed)
+		{
+			float volume = GetImpactVolume(impactSpeed, minimumImpactSpeed);
+			var cue = Game1.soundBank.GetCue(cueName);
+			cue.SetVariable("Volume", MathHelper.Lerp(-12f, 0f, volume));
+			cue.Play();
+		}
+
+		private static Rectangle GetButtonColumnItemBounds(int index)
+		{
+			return new Rectangle(
+				ButtonColumnOrigin.X + index * (ButtonColumnItemSize.X + ButtonColumnItemSpacing),
+				ButtonColumnOrigin.Y,
+				ButtonColumnItemSize.X,
+				ButtonColumnItemSize.Y
+			);
+		}
+
+		private sealed record RowElement(int Index, RowElementType Type, Rectangle Source, Rectangle Bounds, Action? OnActivate);
+
+		private enum RowElementType
+		{
+			Button,
+			Idle,
+			Arrow
 		}
 
 		private static void DrawBall(SpriteBatch batch, StardropPoolAssets assets, PoolBall ball)

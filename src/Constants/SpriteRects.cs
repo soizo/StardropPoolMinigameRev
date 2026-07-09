@@ -83,7 +83,10 @@ namespace StardropPoolMinigameRev.Constants
 
         public static class Ui
         {
-            public static readonly Microsoft.Xna.Framework.Rectangle Reset = new(306, 341, 16, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle Reset = new(306, 340, 16, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle ResetGaldora = new(322, 340, 16, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle BackToMenu = new(338, 340, 16, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle BackToMenuGaldora = new(354, 340, 16, 16);
         }
 
         public static class Ball

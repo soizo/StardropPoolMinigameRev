@@ -21,6 +21,8 @@ namespace StardropPoolMinigameRev
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
         private readonly Action<PoolTableSnapshot> _saveSnapshot;
+        private readonly bool _isSveInstalled;
+        private PoolTableSnapshot? _currentSnapshot;
         private readonly string? _previousMusicTrack;
         private readonly bool _previousMouseVisible;
         private readonly int _previousMouseCursor;
@@ -34,6 +36,9 @@ namespace StardropPoolMinigameRev
         {
             _monitor = monitor;
             _saveSnapshot = saveSnapshot;
+            _currentSnapshot = snapshot;
+            _isSveInstalled = helper.ModRegistry.IsLoaded("FlashShifter.StardewValleyExpandedCP")
+                || helper.ModRegistry.IsLoaded("FlashShifter.SVECode");
             _monitor.Log("Creating Stardrop Pool rewrite minigame.", LogLevel.Info);
 
             _viewport = new MinigameViewport();
@@ -44,7 +49,7 @@ namespace StardropPoolMinigameRev
             _assets = new StardropPoolAssets(helper, _monitor);
             _assets.Load();
 
-            _scene = new GameScene(_monitor, snapshot);
+            _scene = new GameScene(_monitor, snapshot, _isSveInstalled);
             _previousMusicTrack = Game1.currentSong?.Name;
             Game1.changeMusicTrack("movieTheater");
 
@@ -71,10 +76,11 @@ namespace StardropPoolMinigameRev
             {
                 case SceneId.Game:
                     _monitor.Log("Transitioning to game scene.", LogLevel.Info);
-                    _scene = new GameScene(_monitor, null);
+                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled);
                     break;
                 case SceneId.MainMenu:
                     _monitor.Log("Transitioning to main menu.", LogLevel.Info);
+                    PersistSceneState();
                     _scene = new MainMenuScene(_monitor);
                     break;
             }
@@ -301,7 +307,9 @@ namespace StardropPoolMinigameRev
             if (_scene is GameScene gameScene)
             {
                 gameScene.SettleBalls();
-                _saveSnapshot(gameScene.CreateSnapshot());
+                PoolTableSnapshot snapshot = gameScene.CreateSnapshot();
+                _currentSnapshot = snapshot;
+                _saveSnapshot(snapshot);
             }
         }
 

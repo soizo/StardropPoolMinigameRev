@@ -169,6 +169,15 @@ Default 368,128; Frame1 320,128; Frame2 336,128; Frame3 352,128.
 - TextPanelLeftCap: 192,341,5,24
 - TextPanelFill: 197,340,1,24 (tile horizontally to fill width)
 - TextPanelRightCap: 299,341,5,24
+- ResetButton: 306,341,16,16
+
+#### Top-row UI elements
+- The row is composed of **row elements**.
+- We currently have one row element.
+- Row element types:
+  - **Button** — clickable. Buttons should support a Galdora-style visual treatment. The implementation must detect whether the current theme is Galdora; if this depends on Stardew Valley Expanded, it must also detect whether the SVE mod is installed before checking theme state. On hover, a button expands linearly by 1 px on all sides.
+  - **Idle** — non-interactive display content. It cannot be clicked; it simply exists in the row.
+  - **Arrow** — directional control element. It has no hover reaction. While pressed, it shrinks by 1 px.
 
 #### Portrait fire animation (64×64, 8 frames)
 1: 192,272 · 2: 256,272 · 3: 320,272 · 4: 384,272 · 5: 448,272 · 6: 0,336 · 7: 64,336 · 8: 128,336
