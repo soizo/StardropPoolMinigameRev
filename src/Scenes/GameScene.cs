@@ -34,9 +34,8 @@ namespace StardropPoolMinigameRev.Scenes
 		private const int PocketNorthY = TableTop + TableSegmentSize / 2;
 		private const int PocketSouthY = TableTop + (TableRows - 1) * TableSegmentSize + TableSegmentSize / 2;
 		private const int FlatPocketBorderOffset = 0;
-		private const int VerticalPocketStraightEdgeHeight = 1;
+		private const int TopBottomPocketStraightEdgeWidth = 1;
 		private const int PocketMiddleX = TableLeft + TableWidth / 2 + FlatPocketBorderOffset;
-		private const int PocketMiddleY = TableTop + TableHeight / 2 + VerticalPocketStraightEdgeHeight;
 		private const int FeltRight = FeltLeft + FeltWidth;
 		private const int FeltBottom = FeltTop + FeltHeight;
 		private const int BallSize = 16;
@@ -60,6 +59,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float CueStickRestOffset = 4f;
 		private const float CueStickOriginX = 122f;
 		private const float CueStickOriginY = 8f;
+		private static readonly Rectangle ResetButtonBounds = new(8, 6, 16, 16);
 
 		private static readonly Color AimLineColour = new(255, 238, 209);
 		private static readonly Color AimLineShadowColour = new(25, 11, 16);
@@ -107,10 +107,11 @@ namespace StardropPoolMinigameRev.Scenes
 		private int _pocketed;
 		private double _scratchMessageMilliseconds;
 
-		public GameScene(IMonitor monitor)
+		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot)
 		{
 			_monitor = monitor;
 			ResetRack();
+			LoadSnapshot(snapshot);
 		}
 
 		public SceneId PendingTransition { get; private set; }
@@ -142,22 +143,7 @@ namespace StardropPoolMinigameRev.Scenes
 				return;
 			}
 
-			foreach (PoolBall ball in _balls)
-			{
-				if (ball.IsPocketed)
-				{
-					continue;
-				}
-
-				Vector2 movement = ball.Velocity * dt;
-				ball.Position += movement;
-				ball.Roll(movement);
-				ApplyFriction(ball, dt);
-				ResolveWallCollision(ball);
-			}
-
-			ResolveBallCollisions();
-			ResolvePockets();
+			StepPhysics(dt);
 		}
 
 		public void Draw(SpriteBatch batch, MinigameViewport viewport, StardropPoolAssets assets)
@@ -168,11 +154,18 @@ namespace StardropPoolMinigameRev.Scenes
 			DrawBalls(batch, assets);
 			DrawTableFront(batch, assets);
 			DrawCueStick(batch, assets);
-			DrawHud(batch);
+			DrawHud(batch, assets);
 		}
 
 		public void ReceiveLeftClick(Vector2 logicalPosition)
 		{
+			if (IsPointInResetButton(logicalPosition))
+			{
+				ResetTable();
+				Game1.playSound("bigDeSelect");
+				return;
+			}
+
 			PoolBall? cueBall = GetCueBall();
 			if (cueBall == null || AreBallsMoving() || _isCueStriking)
 			{
@@ -214,6 +207,58 @@ namespace StardropPoolMinigameRev.Scenes
 			_monitor.Log($"Game scene key press: {key}.", LogLevel.Info);
 		}
 
+		public void SettleBalls()
+		{
+			_isAiming = false;
+			_isCueStriking = false;
+			_showCueAfterStrike = false;
+			_hasCueStruckBall = false;
+			_strikeMilliseconds = 0;
+			_strikeDurationMilliseconds = 0;
+			AdvanceUntilSettled();
+		}
+
+		public void ResetTable()
+		{
+			_isAiming = false;
+			_isCueStriking = false;
+			_showCueAfterStrike = false;
+			_hasCueStruckBall = false;
+			_strikeMilliseconds = 0;
+			_strikeDurationMilliseconds = 0;
+			_scratchMessageMilliseconds = 0;
+			_shots = 0;
+			_pocketed = 0;
+			ResetRack();
+		}
+
+		public PoolTableSnapshot CreateSnapshot()
+		{
+			PoolTableSnapshot snapshot = new()
+			{
+				Shots = _shots,
+				Pocketed = _pocketed
+			};
+
+			for (int i = 0; i < _balls.Count; i++)
+			{
+				PoolBall ball = _balls[i];
+				snapshot.Balls.Add(new PoolBallSnapshot
+				{
+					Index = i,
+					PositionX = ball.Position.X,
+					PositionY = ball.Position.Y,
+					VelocityX = ball.Velocity.X,
+					VelocityY = ball.Velocity.Y,
+					OrientationX = ball.Orientation.X,
+					OrientationY = ball.Orientation.Y,
+					IsPocketed = ball.IsPocketed
+				});
+			}
+
+			return snapshot;
+		}
+
 		private void ResetRack()
 		{
 			_balls.Clear();
@@ -235,6 +280,72 @@ namespace StardropPoolMinigameRev.Scenes
 					index++;
 				}
 			}
+		}
+
+		private void LoadSnapshot(PoolTableSnapshot? snapshot)
+		{
+			if (snapshot == null || snapshot.Balls.Count != _balls.Count)
+			{
+				return;
+			}
+
+			foreach (PoolBallSnapshot ballSnapshot in snapshot.Balls)
+			{
+				if (ballSnapshot.Index < 0 || ballSnapshot.Index >= _balls.Count)
+				{
+					return;
+				}
+			}
+
+			_shots = snapshot.Shots;
+			_pocketed = snapshot.Pocketed;
+			for (int i = 0; i < snapshot.Balls.Count; i++)
+			{
+				PoolBallSnapshot ballSnapshot = snapshot.Balls[i];
+				PoolBall ball = _balls[ballSnapshot.Index];
+				ball.Position = new Vector2(ballSnapshot.PositionX, ballSnapshot.PositionY);
+				ball.Velocity = new Vector2(ballSnapshot.VelocityX, ballSnapshot.VelocityY);
+				ball.Orientation = new Vector2(ballSnapshot.OrientationX, ballSnapshot.OrientationY);
+				ball.IsPocketed = ballSnapshot.IsPocketed;
+			}
+
+			AdvanceUntilSettled();
+		}
+
+		private void AdvanceUntilSettled()
+		{
+			const int maxSteps = 7200;
+			const float dt = 1f / 60f;
+
+			for (int step = 0; step < maxSteps && AreBallsMoving(); step++)
+			{
+				StepPhysics(dt);
+			}
+
+			foreach (PoolBall ball in _balls)
+			{
+				ball.Velocity = Vector2.Zero;
+			}
+		}
+
+		private void StepPhysics(float dt)
+		{
+			foreach (PoolBall ball in _balls)
+			{
+				if (ball.IsPocketed)
+				{
+					continue;
+				}
+
+				Vector2 movement = ball.Velocity * dt;
+				ball.Position += movement;
+				ball.Roll(movement);
+				ApplyFriction(ball, dt);
+				ResolveWallCollision(ball);
+			}
+
+			ResolveBallCollisions();
+			ResolvePockets();
 		}
 
 		private void ShootCueBall()
@@ -420,9 +531,7 @@ namespace StardropPoolMinigameRev.Scenes
 				|| Vector2.Distance(position, new Vector2(PocketEastX, PocketNorthY)) <= PocketRadius
 				|| Vector2.Distance(position, new Vector2(PocketWestX, PocketSouthY)) <= PocketRadius
 				|| Vector2.Distance(position, new Vector2(PocketMiddleX, PocketSouthY)) <= PocketRadius
-				|| Vector2.Distance(position, new Vector2(PocketEastX, PocketSouthY)) <= PocketRadius
-				|| Vector2.Distance(position, new Vector2(PocketWestX, PocketMiddleY)) <= PocketRadius
-				|| Vector2.Distance(position, new Vector2(PocketEastX, PocketMiddleY)) <= PocketRadius;
+				|| Vector2.Distance(position, new Vector2(PocketEastX, PocketSouthY)) <= PocketRadius;
 		}
 
 		private bool AreBallsMoving()
@@ -453,13 +562,13 @@ namespace StardropPoolMinigameRev.Scenes
 		private static void DrawTableBack(SpriteBatch batch, StardropPoolAssets assets)
 		{
 			DrawTableLayer(batch, assets, TableBackSources, drawFelt: false);
-			DrawCentredMiddlePockets(batch, assets, back: true);
+			DrawTopBottomMiddlePockets(batch, assets, back: true);
 		}
 
 		private static void DrawTableFront(SpriteBatch batch, StardropPoolAssets assets)
 		{
 			DrawTableLayer(batch, assets, TableFrontSources, drawFelt: false);
-			DrawCentredMiddlePockets(batch, assets, back: false);
+			DrawTopBottomMiddlePockets(batch, assets, back: false);
 		}
 
 		private static void DrawFeltSurface(SpriteBatch batch, StardropPoolAssets assets)
@@ -500,64 +609,37 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 		}
 
-		private static void DrawCentredMiddlePockets(SpriteBatch batch, StardropPoolAssets assets, bool back)
+		private static void DrawTopBottomMiddlePockets(SpriteBatch batch, StardropPoolAssets assets, bool back)
 		{
 			Rectangle north = back ? SpriteRects.Environment.Pocket.Back.North : SpriteRects.Environment.Pocket.Front.North;
 			Rectangle south = back ? SpriteRects.Environment.Pocket.Back.South : SpriteRects.Environment.Pocket.Front.South;
-			Rectangle west = back ? SpriteRects.Environment.Pocket.Back.West : SpriteRects.Environment.Pocket.Front.West;
-			Rectangle east = back ? SpriteRects.Environment.Pocket.Back.East : SpriteRects.Environment.Pocket.Front.East;
+			Rectangle northEdge = back ? SpriteRects.Environment.Edge.Back.North : SpriteRects.Environment.Edge.Front.North;
+			Rectangle southEdge = back ? SpriteRects.Environment.Edge.Back.South : SpriteRects.Environment.Edge.Front.South;
 
-			DrawMiddlePocketEdgeCaps(batch, assets, back);
-
+			DrawTopBottomPocketEdgeCaps(batch, assets, northEdge, southEdge);
 			batch.Draw(assets.Tilesheet, new Rectangle(PocketMiddleX - north.Width / 2, TableTop, north.Width, north.Height), north, Color.White);
 			batch.Draw(assets.Tilesheet, new Rectangle(PocketMiddleX - south.Width / 2, TableTop + TableHeight - south.Height, south.Width, south.Height), south, Color.White);
-			batch.Draw(assets.Tilesheet, new Rectangle(TableLeft, PocketMiddleY - west.Height / 2, west.Width, west.Height), west, Color.White);
-			batch.Draw(assets.Tilesheet, new Rectangle(TableLeft + TableWidth - east.Width, PocketMiddleY - east.Height / 2, east.Width, east.Height), east, Color.White);
 		}
 
-		private static void DrawMiddlePocketEdgeCaps(SpriteBatch batch, StardropPoolAssets assets, bool back)
+		private static void DrawTopBottomPocketEdgeCaps(SpriteBatch batch, StardropPoolAssets assets, Rectangle northEdge, Rectangle southEdge)
 		{
-			Rectangle north = back ? SpriteRects.Environment.Edge.Back.North : SpriteRects.Environment.Edge.Front.North;
-			Rectangle south = back ? SpriteRects.Environment.Edge.Back.South : SpriteRects.Environment.Edge.Front.South;
-			Rectangle west = back ? SpriteRects.Environment.Edge.Back.West : SpriteRects.Environment.Edge.Front.West;
-			Rectangle east = back ? SpriteRects.Environment.Edge.Back.East : SpriteRects.Environment.Edge.Front.East;
-
 			int skippedLeft = TableLeft + (TableColumns / 2 - 1) * TableSegmentSize;
 			int skippedRight = TableLeft + (TableColumns / 2 + 1) * TableSegmentSize;
 			int pocketLeft = PocketMiddleX - TableSegmentSize / 2;
 			int pocketRight = PocketMiddleX + TableSegmentSize / 2;
-			int leftWidth = Math.Max(0, pocketLeft - skippedLeft);
-			int rightWidth = Math.Max(0, skippedRight - pocketRight);
-
-			int skippedTop = TableTop + (TableRows / 2 - 1) * TableSegmentSize;
-			int skippedBottom = TableTop + (TableRows / 2 + 1) * TableSegmentSize;
-			int pocketTop = PocketMiddleY - TableSegmentSize / 2;
-			int pocketBottom = PocketMiddleY + TableSegmentSize / 2;
-			int topHeight = Math.Max(0, pocketTop - skippedTop);
-			int bottomHeight = Math.Max(0, skippedBottom - pocketBottom);
+			int leftWidth = Math.Max(0, pocketLeft - skippedLeft + TopBottomPocketStraightEdgeWidth);
+			int rightWidth = Math.Max(0, skippedRight - pocketRight + TopBottomPocketStraightEdgeWidth);
 
 			if (leftWidth > 0)
 			{
-				batch.Draw(assets.Tilesheet, new Rectangle(skippedLeft, TableTop, leftWidth, north.Height), new Rectangle(north.X, north.Y, leftWidth, north.Height), Color.White);
-				batch.Draw(assets.Tilesheet, new Rectangle(skippedLeft, TableTop + TableHeight - south.Height, leftWidth, south.Height), new Rectangle(south.X, south.Y, leftWidth, south.Height), Color.White);
+				batch.Draw(assets.Tilesheet, new Rectangle(skippedLeft, TableTop, leftWidth, northEdge.Height), new Rectangle(northEdge.X, northEdge.Y, leftWidth, northEdge.Height), Color.White);
+				batch.Draw(assets.Tilesheet, new Rectangle(skippedLeft, TableTop + TableHeight - southEdge.Height, leftWidth, southEdge.Height), new Rectangle(southEdge.X, southEdge.Y, leftWidth, southEdge.Height), Color.White);
 			}
 
 			if (rightWidth > 0)
 			{
-				batch.Draw(assets.Tilesheet, new Rectangle(pocketRight, TableTop, rightWidth, north.Height), new Rectangle(north.X + north.Width - rightWidth, north.Y, rightWidth, north.Height), Color.White);
-				batch.Draw(assets.Tilesheet, new Rectangle(pocketRight, TableTop + TableHeight - south.Height, rightWidth, south.Height), new Rectangle(south.X + south.Width - rightWidth, south.Y, rightWidth, south.Height), Color.White);
-			}
-
-			if (topHeight > 0)
-			{
-				batch.Draw(assets.Tilesheet, new Rectangle(TableLeft, skippedTop, west.Width, topHeight), new Rectangle(west.X, west.Y, west.Width, topHeight), Color.White);
-				batch.Draw(assets.Tilesheet, new Rectangle(TableLeft + TableWidth - east.Width, skippedTop, east.Width, topHeight), new Rectangle(east.X, east.Y, east.Width, topHeight), Color.White);
-			}
-
-			if (bottomHeight > 0)
-			{
-				batch.Draw(assets.Tilesheet, new Rectangle(TableLeft, pocketBottom, west.Width, bottomHeight), new Rectangle(west.X, west.Y + west.Height - bottomHeight, west.Width, bottomHeight), Color.White);
-				batch.Draw(assets.Tilesheet, new Rectangle(TableLeft + TableWidth - east.Width, pocketBottom, east.Width, bottomHeight), new Rectangle(east.X, east.Y + east.Height - bottomHeight, east.Width, bottomHeight), Color.White);
+				batch.Draw(assets.Tilesheet, new Rectangle(pocketRight - TopBottomPocketStraightEdgeWidth, TableTop, rightWidth, northEdge.Height), new Rectangle(northEdge.X + northEdge.Width - rightWidth, northEdge.Y, rightWidth, northEdge.Height), Color.White);
+				batch.Draw(assets.Tilesheet, new Rectangle(pocketRight - TopBottomPocketStraightEdgeWidth, TableTop + TableHeight - southEdge.Height, rightWidth, southEdge.Height), new Rectangle(southEdge.X + southEdge.Width - rightWidth, southEdge.Y, rightWidth, southEdge.Height), Color.White);
 			}
 		}
 
@@ -569,8 +651,6 @@ namespace StardropPoolMinigameRev.Scenes
 			int lastRow = TableRows - 1;
 			int firstMiddleColumn = TableColumns / 2 - 1;
 			int secondMiddleColumn = TableColumns / 2;
-			int firstMiddleRow = TableRows / 2 - 1;
-			int secondMiddleRow = TableRows / 2;
 
 			for (int row = 0; row < TableRows; row++)
 			{
@@ -598,11 +678,6 @@ namespace StardropPoolMinigameRev.Scenes
 
 			for (int row = 1; row < lastRow; row++)
 			{
-				if (row == firstMiddleRow || row == secondMiddleRow)
-				{
-					continue;
-				}
-
 				sources[row, 0] = back ? SpriteRects.Environment.Edge.Back.West : SpriteRects.Environment.Edge.Front.West;
 				sources[row, lastColumn] = back ? SpriteRects.Environment.Edge.Back.East : SpriteRects.Environment.Edge.Front.East;
 			}
@@ -758,20 +833,15 @@ namespace StardropPoolMinigameRev.Scenes
 			DrawLine(batch, cueBall.Position, end, AimLineColour, 1);
 		}
 
-		private void DrawHud(SpriteBatch batch)
+		private void DrawHud(SpriteBatch batch, StardropPoolAssets assets)
 		{
-			string text = $"Shots: {_shots}  Pocketed: {_pocketed}";
-			batch.DrawString(Game1.smallFont, text, new Vector2(8, 6), Color.Black * 0.75f, 0f, Vector2.Zero, 0.35f, SpriteEffects.None, 1f);
-			batch.DrawString(Game1.smallFont, text, new Vector2(7, 5), new Color(255, 238, 209), 0f, Vector2.Zero, 0.35f, SpriteEffects.None, 1f);
+			batch.Draw(assets.Tilesheet, ResetButtonBounds, SpriteRects.Ui.Reset, Color.White);
+		}
 
-			if (_scratchMessageMilliseconds > 0)
-			{
-				string scratch = "Scratch!";
-				Vector2 size = Game1.dialogueFont.MeasureString(scratch) * 0.35f;
-				Vector2 position = new((MinigameViewport.LogicalWidth - size.X) / 2f, 8);
-				batch.DrawString(Game1.dialogueFont, scratch, position + new Vector2(1, 1), Color.Black * 0.8f, 0f, Vector2.Zero, 0.35f, SpriteEffects.None, 1f);
-				batch.DrawString(Game1.dialogueFont, scratch, position, Color.OrangeRed, 0f, Vector2.Zero, 0.35f, SpriteEffects.None, 1f);
-			}
+		private static bool IsPointInResetButton(Vector2 logicalPosition)
+		{
+			Point point = new((int)MathF.Floor(logicalPosition.X), (int)MathF.Floor(logicalPosition.Y));
+			return ResetButtonBounds.Contains(point);
 		}
 
 		private static void DrawBall(SpriteBatch batch, StardropPoolAssets assets, PoolBall ball)
@@ -881,6 +951,8 @@ namespace StardropPoolMinigameRev.Scenes
 
 			public bool IsHighlighted { get; }
 
+			public Vector2 Orientation { get; set; }
+
 			public Vector2 OrientationFace => GetOrientationFace();
 
 			public bool IsPocketed { get; set; }
@@ -899,8 +971,6 @@ namespace StardropPoolMinigameRev.Scenes
 				);
 				LimitOrientation();
 			}
-
-			private Vector2 Orientation { get; set; }
 
 			private Vector2 GetOrientationFace()
 			{

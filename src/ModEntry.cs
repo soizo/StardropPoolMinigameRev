@@ -6,8 +6,14 @@ namespace StardropPoolMinigameRev
 {
     public sealed class ModEntry : Mod
     {
+        private const string SaveDataKey = "pool-table-state";
+
+        private PoolTableSaveData _saveData = new();
+
         public override void Entry(IModHelper helper)
         {
+            helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            helper.Events.GameLoop.Saving += OnSaving;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonsChanged += OnButtonsChanged;
             Monitor.Log("Stardrop Pool Minigame Rev loaded.", LogLevel.Info);
@@ -66,6 +72,16 @@ namespace StardropPoolMinigameRev
             }
         }
 
+        private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        {
+            _saveData = Helper.Data.ReadSaveData<PoolTableSaveData>(SaveDataKey) ?? new PoolTableSaveData();
+        }
+
+        private void OnSaving(object? sender, SavingEventArgs e)
+        {
+            Helper.Data.WriteSaveData(SaveDataKey, _saveData);
+        }
+
         private static bool IsShortcutButton(SButton button)
         {
             return button != SButton.Escape
@@ -76,7 +92,12 @@ namespace StardropPoolMinigameRev
         private void StartGame()
         {
             Monitor.Log("Starting Stardrop Pool minigame from pool table interaction.", LogLevel.Info);
-            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor);
+            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, _saveData.CurrentTable, SaveCurrentTable);
+        }
+
+        private void SaveCurrentTable(PoolTableSnapshot snapshot)
+        {
+            _saveData.CurrentTable = snapshot;
         }
     }
 }

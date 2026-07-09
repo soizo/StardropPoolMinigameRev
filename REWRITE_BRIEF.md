@@ -166,6 +166,9 @@ Default 368,128; Frame1 320,128; Frame2 336,128; Frame3 352,128.
 #### Pocketed-balls UI
 - BorderBox: 192,336,112,32
 - Supports: 384,128,16,16
+- TextPanelLeftCap: 192,341,5,24
+- TextPanelFill: 197,340,1,24 (tile horizontally to fill width)
+- TextPanelRightCap: 299,341,5,24
 
 #### Portrait fire animation (64×64, 8 frames)
 1: 192,272 · 2: 256,272 · 3: 320,272 · 4: 384,272 · 5: 448,272 · 6: 0,336 · 7: 64,336 · 8: 128,336

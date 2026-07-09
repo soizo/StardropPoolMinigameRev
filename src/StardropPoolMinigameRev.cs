@@ -20,6 +20,7 @@ namespace StardropPoolMinigameRev
         private IMinigameScene _scene;
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
+        private readonly Action<PoolTableSnapshot> _saveSnapshot;
         private readonly string? _previousMusicTrack;
         private readonly bool _previousMouseVisible;
         private readonly int _previousMouseCursor;
@@ -29,9 +30,10 @@ namespace StardropPoolMinigameRev
         private Vector2 _lastRawLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
         private Vector2 _capturedLogicalMouse = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
 
-        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor)
+        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot)
         {
             _monitor = monitor;
+            _saveSnapshot = saveSnapshot;
             _monitor.Log("Creating Stardrop Pool rewrite minigame.", LogLevel.Info);
 
             _viewport = new MinigameViewport();
@@ -42,7 +44,7 @@ namespace StardropPoolMinigameRev
             _assets = new StardropPoolAssets(helper, _monitor);
             _assets.Load();
 
-            _scene = new MainMenuScene(_monitor);
+            _scene = new GameScene(_monitor, snapshot);
             _previousMusicTrack = Game1.currentSong?.Name;
             Game1.changeMusicTrack("movieTheater");
 
@@ -69,7 +71,7 @@ namespace StardropPoolMinigameRev
             {
                 case SceneId.Game:
                     _monitor.Log("Transitioning to game scene.", LogLevel.Info);
-                    _scene = new GameScene(_monitor);
+                    _scene = new GameScene(_monitor, null);
                     break;
                 case SceneId.MainMenu:
                     _monitor.Log("Transitioning to main menu.", LogLevel.Info);
@@ -198,6 +200,7 @@ namespace StardropPoolMinigameRev
         public void unload()
         {
             _monitor.Log("Unloading Stardrop Pool rewrite minigame.", LogLevel.Info);
+            PersistSceneState();
             RestoreMouseState();
             Game1.changeMusicTrack(_previousMusicTrack ?? "none");
         }
@@ -291,6 +294,15 @@ namespace StardropPoolMinigameRev
             Game1.mouseCursor = _previousMouseCursor;
             _wasCapturingMouse = false;
             _mouseMovedToRelease = false;
+        }
+
+        private void PersistSceneState()
+        {
+            if (_scene is GameScene gameScene)
+            {
+                gameScene.SettleBalls();
+                _saveSnapshot(gameScene.CreateSnapshot());
+            }
         }
 
         private void MoveMouseToLogical(Vector2 logicalPosition)
