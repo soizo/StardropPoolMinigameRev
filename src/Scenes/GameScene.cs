@@ -894,8 +894,8 @@ namespace StardropPoolMinigameRev.Scenes
 
 				float circumference = MathF.PI * BallCollisionRadius * 2f;
 				Orientation = new Vector2(
-					Orientation.X + movement.X / circumference * 360f,
-					Orientation.Y + movement.Y / circumference * 360f
+					Orientation.X - movement.X / circumference * 360f,
+					Orientation.Y - movement.Y / circumference * 360f
 				);
 				LimitOrientation();
 			}
