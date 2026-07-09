@@ -15,7 +15,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const int TableColumns = 12;
 		private const int TableRows = 6;
 		private const int TableLeft = (MinigameViewport.LogicalWidth - TableColumns * TableSegmentSize) / 2;
-		private const int TableTop = 16;
+		private const int TableTop = (MinigameViewport.LogicalHeight - TableHeight) / 2;
 		private const int TableWidth = TableColumns * TableSegmentSize;
 		private const int TableHeight = TableRows * TableSegmentSize;
 		private const int TableCollisionInset = 16;
@@ -51,6 +51,15 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float BallRestitution = 0.96f;
 		private const float StopSpeed = 5f;
 		private const float PocketRadius = 8f;
+		private const float CueStickTouchDistance = BallCollisionRadius + 5f;
+		private const float CueStickPullDistance = 32f;
+		private const float CueStrikeMinimumMilliseconds = 150f;
+		private const float CueStrikeMaximumMilliseconds = 300f;
+		private const float CueStrikeContactPoint = 0.55f;
+		private const float CueStickTipOvershoot = 3f;
+		private const float CueStickRestOffset = 4f;
+		private const float CueStickOriginX = 122f;
+		private const float CueStickOriginY = 8f;
 
 		private static readonly Color AimLineColour = new(255, 238, 209);
 		private static readonly Color AimLineShadowColour = new(25, 11, 16);
@@ -84,7 +93,16 @@ namespace StardropPoolMinigameRev.Scenes
 		private readonly IMonitor _monitor;
 		private readonly List<PoolBall> _balls = new();
 		private bool _isAiming;
+		private Vector2 _aimStartPosition;
 		private Vector2 _aimPosition;
+		private bool _isCueStriking;
+		private bool _hasCueStruckBall;
+		private bool _showCueAfterStrike;
+		private Vector2 _strikeCueBallPosition;
+		private Vector2 _strikeDirection;
+		private float _strikePowerRatio;
+		private double _strikeMilliseconds;
+		private double _strikeDurationMilliseconds;
 		private int _shots;
 		private int _pocketed;
 		private double _scratchMessageMilliseconds;
@@ -97,6 +115,10 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public SceneId PendingTransition { get; private set; }
 
+		public bool CapturesMouse => _isAiming || _isCueStriking || _showCueAfterStrike;
+
+		public Vector2? MouseReleaseLogicalPosition => (_isCueStriking || _showCueAfterStrike) ? _strikeCueBallPosition : null;
+
 		public void Update(GameTime time)
 		{
 			float dt = Math.Min((float)time.ElapsedGameTime.TotalSeconds, 1f / 30f);
@@ -105,8 +127,18 @@ namespace StardropPoolMinigameRev.Scenes
 				_scratchMessageMilliseconds = Math.Max(0, _scratchMessageMilliseconds - time.ElapsedGameTime.TotalMilliseconds);
 			}
 
+			if (_isCueStriking)
+			{
+				_strikeMilliseconds += time.ElapsedGameTime.TotalMilliseconds;
+				if (_strikeMilliseconds >= _strikeDurationMilliseconds)
+				{
+					FinishCueStrike();
+				}
+			}
+
 			if (!AreBallsMoving())
 			{
+				_showCueAfterStrike = false;
 				return;
 			}
 
@@ -135,23 +167,22 @@ namespace StardropPoolMinigameRev.Scenes
 			DrawTableBack(batch, assets);
 			DrawBalls(batch, assets);
 			DrawTableFront(batch, assets);
-			DrawAim(batch);
+			DrawCueStick(batch, assets);
 			DrawHud(batch);
 		}
 
 		public void ReceiveLeftClick(Vector2 logicalPosition)
 		{
 			PoolBall? cueBall = GetCueBall();
-			if (cueBall == null || AreBallsMoving())
+			if (cueBall == null || AreBallsMoving() || _isCueStriking)
 			{
 				return;
 			}
 
-			if (Vector2.Distance(cueBall.Position, logicalPosition) <= AimGrabRadius)
-			{
-				_isAiming = true;
-				_aimPosition = logicalPosition;
-			}
+			_isAiming = true;
+			_showCueAfterStrike = false;
+			_aimStartPosition = logicalPosition;
+			_aimPosition = logicalPosition;
 		}
 
 		public void LeftClickHeld(Vector2 logicalPosition)
@@ -214,16 +245,48 @@ namespace StardropPoolMinigameRev.Scenes
 				return;
 			}
 
-			Vector2 pull = _aimPosition - cueBall.Position;
+			Vector2 pull = _aimPosition - _aimStartPosition;
 			float pullDistance = pull.Length();
-			if (pullDistance < 4f)
+			if (pullDistance <= BallCollisionRadius)
 			{
 				return;
 			}
 
-			float clampedPull = Math.Min(pullDistance, MaxPullDistance);
-			Vector2 direction = -Vector2.Normalize(pull);
-			cueBall.Velocity = direction * clampedPull * ShotPower;
+			float effectivePull = Math.Min(pullDistance - BallCollisionRadius, MaxPullDistance);
+			_strikeDirection = -Vector2.Normalize(pull);
+			_strikeCueBallPosition = cueBall.Position;
+			_strikePowerRatio = effectivePull / MaxPullDistance;
+			_strikeDurationMilliseconds = MathHelper.Lerp(CueStrikeMaximumMilliseconds, CueStrikeMinimumMilliseconds, _strikePowerRatio);
+			_strikeMilliseconds = 0;
+			_hasCueStruckBall = false;
+			_isCueStriking = true;
+		}
+
+		private void FinishCueStrike()
+		{
+			_isCueStriking = false;
+			_showCueAfterStrike = true;
+			if (!_hasCueStruckBall)
+			{
+				ApplyCueStrike();
+			}
+		}
+
+		private void ApplyCueStrike()
+		{
+			if (_hasCueStruckBall)
+			{
+				return;
+			}
+
+			_hasCueStruckBall = true;
+			PoolBall? cueBall = GetCueBall();
+			if (cueBall == null)
+			{
+				return;
+			}
+
+			cueBall.Velocity = _strikeDirection * _strikePowerRatio * MaxPullDistance * ShotPower;
 			_shots++;
 			Game1.playSound("thudStep");
 		}
@@ -558,6 +621,122 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 		}
 
+		private void DrawCueStick(SpriteBatch batch, StardropPoolAssets assets)
+		{
+			PoolBall? cueBall = GetCueBall();
+			if (cueBall == null)
+			{
+				return;
+			}
+
+			Vector2 direction;
+			float powerRatio;
+			float strikeProgress = 0f;
+			Vector2 cueBallPosition = cueBall.Position;
+			if (_isCueStriking)
+			{
+				direction = _strikeDirection;
+				powerRatio = _strikePowerRatio;
+				strikeProgress = (float)Math.Min(1, _strikeMilliseconds / _strikeDurationMilliseconds);
+				cueBallPosition = _strikeCueBallPosition;
+			}
+			else if (_showCueAfterStrike)
+			{
+				direction = _strikeDirection;
+				powerRatio = _strikePowerRatio;
+				strikeProgress = 1f;
+				cueBallPosition = _strikeCueBallPosition;
+			}
+			else if (_isAiming)
+			{
+				Vector2 pull = _aimPosition - _aimStartPosition;
+				float pullDistance = pull.Length();
+				if (pullDistance < 1f)
+				{
+					return;
+				}
+
+				float effectivePull = Math.Max(0f, pullDistance - BallCollisionRadius);
+				powerRatio = Math.Min(effectivePull, MaxPullDistance) / MaxPullDistance;
+				direction = -Vector2.Normalize(pull);
+			}
+			else
+			{
+				return;
+			}
+
+			float pullBackDistance = CueStickPullDistance * powerRatio;
+			float strikeOffset;
+			if (_isCueStriking)
+			{
+				if (strikeProgress < CueStrikeContactPoint)
+				{
+					float t = strikeProgress / CueStrikeContactPoint;
+					strikeOffset = MathHelper.Lerp(pullBackDistance, -CueStickTipOvershoot, t * t);
+				}
+				else
+				{
+					if (!_hasCueStruckBall)
+					{
+						ApplyCueStrike();
+					}
+
+					float t = (strikeProgress - CueStrikeContactPoint) / (1f - CueStrikeContactPoint);
+					float eased = 1f - (1f - t) * (1f - t);
+					strikeOffset = MathHelper.Lerp(-CueStickTipOvershoot, CueStickRestOffset, eased);
+				}
+			}
+			else if (_showCueAfterStrike)
+			{
+				strikeOffset = CueStickRestOffset;
+			}
+			else
+			{
+				strikeOffset = pullBackDistance;
+			}
+
+			Vector2 cuePosition = cueBallPosition - direction * (CueStickTouchDistance + strikeOffset);
+			float rotation = MathF.Atan2(direction.Y, direction.X);
+			Vector2 origin = new(CueStickOriginX, CueStickOriginY);
+			SpriteEffects effects = SpriteEffects.FlipHorizontally;
+			batch.Draw(
+				assets.Tilesheet,
+				cuePosition + new Vector2(1.5f, 2f),
+				SpriteRects.Cue.Basic,
+				Color.Black * 0.35f,
+				rotation,
+				origin,
+				1f,
+				effects,
+				1f
+			);
+			batch.Draw(
+				assets.Tilesheet,
+				cuePosition,
+				SpriteRects.Cue.Basic,
+				Color.White,
+				rotation,
+				origin,
+				1f,
+				effects,
+				1f
+			);
+		}
+
+
+
+
+
+
+
+
+		private static float EaseOutBack(float progress)
+		{
+			const float overshoot = 1.35f;
+			float shifted = progress - 1f;
+			return 1f + shifted * shifted * ((overshoot + 1f) * shifted + overshoot);
+		}
+
 		private void DrawAim(SpriteBatch batch)
 		{
 			PoolBall? cueBall = GetCueBall();
@@ -566,7 +745,7 @@ namespace StardropPoolMinigameRev.Scenes
 				return;
 			}
 
-			Vector2 pull = _aimPosition - cueBall.Position;
+			Vector2 pull = _aimPosition - _aimStartPosition;
 			if (pull.LengthSquared() < 1f)
 			{
 				return;

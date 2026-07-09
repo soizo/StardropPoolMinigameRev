@@ -76,6 +76,11 @@ namespace StardropPoolMinigameRev.Constants
             }
         }
 
+        public static class Cue
+        {
+            public static readonly Microsoft.Xna.Framework.Rectangle Basic = new(128, 128, 128, 16);
+        }
+
         public static class Ball
         {
             public static readonly Microsoft.Xna.Framework.Rectangle Highlight = new(368, 176, 16, 16);

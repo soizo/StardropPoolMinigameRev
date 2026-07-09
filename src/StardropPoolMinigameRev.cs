@@ -13,11 +13,21 @@ namespace StardropPoolMinigameRev
 {
     internal sealed class StardropPoolMinigameRev : IMinigame
     {
+        private const float CapturedMouseDeadZone = 0.5f;
+        private const float CapturedMouseWarpDeadZone = 2f;
+
         private readonly StardropPoolAssets _assets;
         private IMinigameScene _scene;
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
         private readonly string? _previousMusicTrack;
+        private readonly bool _previousMouseVisible;
+        private readonly int _previousMouseCursor;
+        private bool _wasCapturingMouse;
+        private bool _mouseMovedToRelease;
+        private Vector2 _captureAnchorLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
+        private Vector2 _lastRawLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
+        private Vector2 _capturedLogicalMouse = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
 
         public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor)
         {
@@ -26,6 +36,8 @@ namespace StardropPoolMinigameRev
 
             _viewport = new MinigameViewport();
             _viewport.Update();
+            _previousMouseVisible = Game1.game1.IsMouseVisible;
+            _previousMouseCursor = Game1.mouseCursor;
 
             _assets = new StardropPoolAssets(helper, _monitor);
             _assets.Load();
@@ -40,6 +52,7 @@ namespace StardropPoolMinigameRev
         public bool tick(GameTime time)
         {
             _viewport.Update();
+            UpdateCapturedMouse();
             _scene.Update(time);
 
             if (_scene.PendingTransition != SceneId.None)
@@ -115,7 +128,7 @@ namespace StardropPoolMinigameRev
 
         public void leftClickHeld(int x, int y)
         {
-            Vector2 logical = _viewport.RawToLogical(x, y);
+            Vector2 logical = GetInputLogicalPosition(x, y);
 
             if (_viewport.ContainsLogical(logical))
             {
@@ -125,7 +138,7 @@ namespace StardropPoolMinigameRev
 
         public void releaseLeftClick(int x, int y)
         {
-            Vector2 logical = _viewport.RawToLogical(x, y);
+            Vector2 logical = GetInputLogicalPosition(x, y);
 
             if (_viewport.ContainsLogical(logical))
             {
@@ -154,6 +167,7 @@ namespace StardropPoolMinigameRev
 
             if (key == Keys.Escape)
             {
+                RestoreMouseState();
                 forceQuit();
                 return;
             }
@@ -184,6 +198,7 @@ namespace StardropPoolMinigameRev
         public void unload()
         {
             _monitor.Log("Unloading Stardrop Pool rewrite minigame.", LogLevel.Info);
+            RestoreMouseState();
             Game1.changeMusicTrack(_previousMusicTrack ?? "none");
         }
 
@@ -201,6 +216,102 @@ namespace StardropPoolMinigameRev
             unload();
             Game1.currentMinigame = null;
             return true;
+        }
+
+        private Vector2 GetInputLogicalPosition(int x, int y)
+        {
+            if (!_scene.CapturesMouse)
+            {
+                return _viewport.RawToLogical(x, y);
+            }
+
+            return _capturedLogicalMouse;
+        }
+
+        private void UpdateCapturedMouse()
+        {
+            if (!_scene.CapturesMouse)
+            {
+                if (_wasCapturingMouse)
+                {
+                    Vector2? releasePosition = _scene.MouseReleaseLogicalPosition;
+                    if (releasePosition.HasValue && !_mouseMovedToRelease)
+                    {
+                        MoveMouseToLogical(releasePosition.Value);
+                    }
+
+                    _wasCapturingMouse = false;
+                    _mouseMovedToRelease = false;
+                }
+
+                Game1.game1.IsMouseVisible = _previousMouseVisible;
+                Game1.mouseCursor = _previousMouseCursor;
+                return;
+            }
+
+            if (!_wasCapturingMouse)
+            {
+                Vector2 raw = _viewport.RawToLogical(Mouse.GetState().X, Mouse.GetState().Y);
+                _captureAnchorLogical = raw;
+                _lastRawLogical = raw;
+                _capturedLogicalMouse = raw;
+                _mouseMovedToRelease = false;
+                _wasCapturingMouse = true;
+            }
+
+            Game1.game1.IsMouseVisible = false;
+            Game1.mouseCursor = Game1.cursor_none;
+
+            Vector2 lockPosition = _scene.MouseReleaseLogicalPosition ?? _captureAnchorLogical;
+            Vector2 rawNow = _viewport.RawToLogical(Mouse.GetState().X, Mouse.GetState().Y);
+            Vector2 delta = rawNow - _lastRawLogical;
+            if (delta.LengthSquared() >= CapturedMouseDeadZone * CapturedMouseDeadZone)
+            {
+                _capturedLogicalMouse += delta;
+                ClampCapturedLogicalMouse();
+            }
+
+            _lastRawLogical = rawNow;
+
+            if (Vector2.DistanceSquared(rawNow, lockPosition) > CapturedMouseWarpDeadZone * CapturedMouseWarpDeadZone)
+            {
+                MoveMouseToLogical(lockPosition);
+                _lastRawLogical = lockPosition;
+            }
+
+            if (_scene.MouseReleaseLogicalPosition.HasValue)
+            {
+                _mouseMovedToRelease = true;
+            }
+        }
+
+        private void RestoreMouseState()
+        {
+            Game1.game1.IsMouseVisible = _previousMouseVisible;
+            Game1.mouseCursor = _previousMouseCursor;
+            _wasCapturingMouse = false;
+            _mouseMovedToRelease = false;
+        }
+
+        private void MoveMouseToLogical(Vector2 logicalPosition)
+        {
+            Mouse.SetPosition(
+                (int)MathF.Round(_viewport.TopLeft.X + logicalPosition.X * _viewport.Scale),
+                (int)MathF.Round(_viewport.TopLeft.Y + logicalPosition.Y * _viewport.Scale)
+            );
+        }
+
+        private void ClampCapturedLogicalMouse()
+        {
+            _capturedLogicalMouse = new Vector2(
+                MathHelper.Clamp(_capturedLogicalMouse.X, 0, MinigameViewport.LogicalWidth - 1),
+                MathHelper.Clamp(_capturedLogicalMouse.Y, 0, MinigameViewport.LogicalHeight - 1)
+            );
+        }
+
+        private static Vector2 GetViewportCentreLogical()
+        {
+            return new Vector2(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
         }
 
         private static string Format(Vector2 position)

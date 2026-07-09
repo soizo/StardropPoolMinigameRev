@@ -20,6 +20,10 @@ namespace StardropPoolMinigameRev.Scenes
 	{
 		SceneId PendingTransition { get; }
 
+		bool CapturesMouse { get; }
+
+		Vector2? MouseReleaseLogicalPosition { get; }
+
 		void Update(GameTime time);
 
 		void Draw(SpriteBatch batch, MinigameViewport viewport, StardropPoolAssets assets);
@@ -61,6 +65,10 @@ namespace StardropPoolMinigameRev.Scenes
 		private Vector2? _lastClick;
 
 		public SceneId PendingTransition { get; private set; }
+
+		public bool CapturesMouse => false;
+
+		public Vector2? MouseReleaseLogicalPosition => null;
 
 		public MainMenuScene(IMonitor monitor)
 		{
