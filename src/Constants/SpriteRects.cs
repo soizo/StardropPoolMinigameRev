@@ -79,6 +79,10 @@ namespace StardropPoolMinigameRev.Constants
         public static class Cue
         {
             public static readonly Microsoft.Xna.Framework.Rectangle Basic = new(128, 128, 128, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle Sam = new(128, 144, 128, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle Sebastian = new(128, 160, 128, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle Abigail = new(128, 176, 128, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle Gus = new(128, 192, 128, 16);
         }
 
         public static class Ui
@@ -87,6 +91,9 @@ namespace StardropPoolMinigameRev.Constants
             public static readonly Microsoft.Xna.Framework.Rectangle ResetGaldora = new(322, 340, 16, 16);
             public static readonly Microsoft.Xna.Framework.Rectangle BackToMenu = new(338, 340, 16, 16);
             public static readonly Microsoft.Xna.Framework.Rectangle BackToMenuGaldora = new(354, 340, 16, 16);
+            public static readonly Microsoft.Xna.Framework.Rectangle ChibiCueStick = new(191, 364, 38, 10);
+            public static readonly Microsoft.Xna.Framework.Rectangle LeftArrow = new(352, 495, 12, 11);
+            public static readonly Microsoft.Xna.Framework.Rectangle RightArrow = new(365, 495, 12, 11);
         }
 
         public static class Ball

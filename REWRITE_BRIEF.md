@@ -17,9 +17,12 @@ All pixel rectangles below are taken verbatim from `TextureConstants.cs` /
 
 A Stardew Valley SMAPI mod that turns the pool table in the Stardrop Saloon
 into a playable minigame. Right-click the table → launch an `IMinigame` with a
-main menu, NPC opponent dialogue, an 8-ball (and other) game, and a summary
-screen. Opponents: Sam, Sebastian, Abigail, Gus. Planned: multiplayer,
-collectable cues, multiple table layouts and gamemodes.
+main menu and an 8-ball game. The rewrite scope is intentionally narrow: only
+single-player mode and NPC-versus mode are in scope. `Gallery` is repurposed
+into a records screen, `Settings` is removed from the in-minigame menu and
+belongs in Generic Mod Config Menu, `SummaryScene` is cut, `DialogueScene` is
+kept but deferred until late, multiplayer is shelved, non-8-ball modes are cut,
+alternate table layouts are cut, and custom cue sticks remain in scope.
 
 - **Mod type:** SMAPI C# mod (`StardropPoolMinigameRev.dll`) **+** a Content
   Patcher content pack that injects two custom tilesheets.
@@ -242,9 +245,20 @@ Classic, Crammed, Goalkeeper, Single Lane, Tug of War (see
 `TableSegmentType` grid differ between layouts.
 
 ### Opponents & progression
-Sam and Sebastian are available from the start; Abigail and Gus unlock as you
-win. Wins/losses/highscores are tracked per opponent (`SaveJson`). Collectable
-cues (`UnlockedCues`, starting with "basic") are earned through play.
+The rewrite only keeps **Sam** and **Sebastian** as NPC opponents. NPC-versus
+mode is **not** a main-menu option. Instead, it is offered only through saloon
+pool-table interaction:
+
+- If neither Sam nor Sebastian is currently in the saloon, only the standard
+  single-player path is available.
+- If exactly one of them is present, interacting with the pool table should
+  start an NPC-versus game against that character.
+- If both are present, interacting with the pool table should first present a
+  two-option opponent choice UI before entering the minigame.
+- That opponent-choice UI must be internationalised from the start.
+
+Wins/losses/records should be tracked for the supported NPC opponents. Custom
+cue sticks remain in scope as unlockable/customisable content.
 
 ---
 

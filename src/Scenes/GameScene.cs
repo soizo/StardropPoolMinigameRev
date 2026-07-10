@@ -15,7 +15,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const int TableColumns = 12;
 		private const int TableRows = 6;
 		private const int TableLeft = (MinigameViewport.LogicalWidth - TableColumns * TableSegmentSize) / 2;
-		private const int TableTop = (MinigameViewport.LogicalHeight - TableHeight) / 2 + 6;
+		private const int TableTop = (MinigameViewport.LogicalHeight - TableHeight) / 2 + 7;
 		private const int TableWidth = TableColumns * TableSegmentSize;
 		private const int TableHeight = TableRows * TableSegmentSize;
 		private const int TableCollisionInset = 16;
@@ -66,14 +66,44 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float CueStickOriginY = 8f;
 		private static readonly Point ButtonColumnOrigin = new(10, 6);
 		private static readonly Point ButtonColumnItemSize = new(16, 16);
+		private static readonly Point CuePreviewSize = new(38, 10);
+		private static readonly Point ArrowSize = new(12, 11);
+		private const int RowContainerHeight = 16;
 		private const int ButtonColumnItemSpacing = 2;
 		private const float ButtonHoverExpansion = 1.5f;
 		private const float RowElementScaleStep = 0.02f;
-		private static readonly Rectangle ResetButtonBounds = GetButtonColumnItemBounds(0);
-		private static readonly Rectangle BackToMenuButtonBounds = GetButtonColumnItemBounds(1);
+		private const string RowResetId = "reset";
+		private const string RowBackToMenuId = "backtomenu";
+		private const string RowFlexibleSpaceId = "flexiblespace";
+		private const string RowSpaceId = "space";
+		private const string RowAvatarId = "avatar";
+		private const string RowCueLeftId = "cue-left";
+		private const string RowCuePreviewId = "cue-preview";
+		private const string RowCueRightId = "cue-right";
+		private static readonly Point AvatarSize = new(16, 16);
+		private static readonly Point SpaceSize = new(8, 16);
+		private static readonly string[] RowElementOrder =
+		{
+			RowBackToMenuId,
+			RowResetId,
+			RowFlexibleSpaceId,
+			RowAvatarId,
+			RowSpaceId,
+			RowCueLeftId,
+			RowCuePreviewId,
+			RowCueRightId
+		};
 
 		private static readonly Color AimLineColour = new(255, 238, 209);
 		private static readonly Color AimLineShadowColour = new(25, 11, 16);
+		private static readonly Rectangle[] CueSources =
+		{
+			SpriteRects.Cue.Basic,
+			SpriteRects.Cue.Sam,
+			SpriteRects.Cue.Sebastian,
+			SpriteRects.Cue.Abigail,
+			SpriteRects.Cue.Gus
+		};
 
 		private static readonly Rectangle[] RackBallSources =
 		{
@@ -110,6 +140,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private bool _isGaldoraTheme;
 		private bool _isPressingRowElement;
 		private int _pressedRowElementIndex = -1;
+		private int _selectedCueIndex;
 		private bool _isAiming;
 		private Vector2 _aimStartPosition;
 		private Vector2 _aimPosition;
@@ -203,7 +234,7 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 
 			PoolBall? cueBall = GetCueBall();
-			if (cueBall == null || AreBallsMoving() || _isCueStriking)
+			if (cueBall == null || AreBallsMoving() || _isCueStriking || !IsWithinFelt(logicalPosition))
 			{
 				return;
 			}
@@ -683,10 +714,12 @@ namespace StardropPoolMinigameRev.Scenes
 			Rectangle south = back ? SpriteRects.Environment.Pocket.Back.South : SpriteRects.Environment.Pocket.Front.South;
 			Rectangle northEdge = back ? SpriteRects.Environment.Edge.Back.North : SpriteRects.Environment.Edge.Front.North;
 			Rectangle southEdge = back ? SpriteRects.Environment.Edge.Back.South : SpriteRects.Environment.Edge.Front.South;
+			Rectangle northInset = new(north.X + 1, north.Y, Math.Max(0, north.Width - 2), north.Height);
+			Rectangle southInset = new(south.X + 1, south.Y, Math.Max(0, south.Width - 2), south.Height);
 
 			DrawTopBottomPocketEdgeCaps(batch, assets, northEdge, southEdge);
-			batch.Draw(assets.Tilesheet, new Rectangle(PocketMiddleX - north.Width / 2, TableTop, north.Width, north.Height), north, Color.White);
-			batch.Draw(assets.Tilesheet, new Rectangle(PocketMiddleX - south.Width / 2, TableTop + TableHeight - south.Height, south.Width, south.Height), south, Color.White);
+			batch.Draw(assets.Tilesheet, new Rectangle(PocketMiddleX - northInset.Width / 2, TableTop, northInset.Width, northInset.Height), northInset, Color.White);
+			batch.Draw(assets.Tilesheet, new Rectangle(PocketMiddleX - southInset.Width / 2, TableTop + TableHeight - southInset.Height, southInset.Width, southInset.Height), southInset, Color.White);
 		}
 
 		private static void DrawTopBottomPocketEdgeCaps(SpriteBatch batch, StardropPoolAssets assets, Rectangle northEdge, Rectangle southEdge)
@@ -845,7 +878,7 @@ namespace StardropPoolMinigameRev.Scenes
 			batch.Draw(
 				assets.Tilesheet,
 				cuePosition + new Vector2(1.5f, 2f),
-				SpriteRects.Cue.Basic,
+				GetSelectedCueSource(),
 				Color.Black * 0.35f,
 				rotation,
 				origin,
@@ -856,7 +889,7 @@ namespace StardropPoolMinigameRev.Scenes
 			batch.Draw(
 				assets.Tilesheet,
 				cuePosition,
-				SpriteRects.Cue.Basic,
+				GetSelectedCueSource(),
 				Color.White,
 				rotation,
 				origin,
@@ -911,10 +944,27 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private void InitialiseRowElements()
 		{
+			Dictionary<string, RowElement> elements = new()
+			{
+				[RowResetId] = new RowElement(RowResetId, RowElementType.Button, GetResetButtonSource(), ButtonColumnItemSize, ResetTable),
+				[RowBackToMenuId] = new RowElement(RowBackToMenuId, RowElementType.Button, GetBackToMenuButtonSource(), ButtonColumnItemSize, ReturnToMainMenu),
+				[RowFlexibleSpaceId] = new RowElement(RowFlexibleSpaceId, RowElementType.FlexibleSpace, Rectangle.Empty, Point.Zero, null),
+				[RowSpaceId] = new RowElement(RowSpaceId, RowElementType.Space, Rectangle.Empty, SpaceSize, null),
+				[RowAvatarId] = new RowElement(RowAvatarId, RowElementType.Avatar, Rectangle.Empty, AvatarSize, null),
+				[RowCueLeftId] = new RowElement(RowCueLeftId, RowElementType.Arrow, SpriteRects.Ui.LeftArrow, ArrowSize, SelectPreviousCue),
+				[RowCuePreviewId] = new RowElement(RowCuePreviewId, RowElementType.Idle, SpriteRects.Ui.ChibiCueStick, CuePreviewSize, null),
+				[RowCueRightId] = new RowElement(RowCueRightId, RowElementType.Arrow, SpriteRects.Ui.RightArrow, ArrowSize, SelectNextCue)
+			};
+
 			_rowElements.Clear();
-			_rowElements.Add(new RowElement(0, RowElementType.Button, GetResetButtonSource(), ResetButtonBounds, ResetTable));
-			_rowElements.Add(new RowElement(1, RowElementType.Button, GetBackToMenuButtonSource(), BackToMenuButtonBounds, ReturnToMainMenu));
-			_rowElements.Sort((left, right) => left.Index.CompareTo(right.Index));
+			foreach (string id in RowElementOrder)
+			{
+				if (elements.TryGetValue(id, out RowElement? element))
+				{
+					_rowElements.Add(element);
+				}
+			}
+
 			_rowElementScales.Clear();
 			for (int i = 0; i < _rowElements.Count; i++)
 			{
@@ -928,7 +978,8 @@ namespace StardropPoolMinigameRev.Scenes
 			for (int i = 0; i < _rowElements.Count; i++)
 			{
 				RowElement rowElement = _rowElements[i];
-				bool isHovered = rowElement.Bounds.Contains(ToPoint(pointerLogicalPosition));
+				Rectangle bounds = GetRowElementBounds(rowElement);
+				bool isHovered = rowElement.Type != RowElementType.FlexibleSpace && rowElement.Type != RowElementType.Space && rowElement.Type != RowElementType.Avatar && bounds.Contains(ToPoint(pointerLogicalPosition));
 				bool isPressed = _isPressingRowElement && _pressedRowElementIndex == i;
 				float targetScale = GetTargetRowElementScale(rowElement, isHovered, isPressed);
 				float currentScale = _rowElementScales.TryGetValue(i, out float scale) ? scale : 1f;
@@ -959,14 +1010,78 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private void DrawRowElement(SpriteBatch batch, StardropPoolAssets assets, RowElement rowElement)
 		{
+			if (rowElement.Type == RowElementType.FlexibleSpace || rowElement.Type == RowElementType.Space)
+			{
+				return;
+			}
+
+			Rectangle bounds = GetRowElementBounds(rowElement);
+			if (rowElement.Type == RowElementType.Avatar)
+			{
+				DrawAvatarRowElement(batch, bounds);
+				return;
+			}
+
+			if (rowElement.Type == RowElementType.Idle && rowElement.Source == SpriteRects.Ui.ChibiCueStick)
+			{
+				DrawCuePreview(batch, assets, rowElement, bounds);
+				return;
+			}
+
+			if (rowElement.Type == RowElementType.Arrow)
+			{
+				DrawArrowRowElement(batch, rowElement, bounds);
+				return;
+			}
+
 			Color tint = GetRowElementTint(rowElement);
 			float scale = GetRowElementScale(rowElement);
 			Vector2 origin = new(rowElement.Source.Width / 2f, rowElement.Source.Height / 2f);
 			Vector2 position = new(
-				rowElement.Bounds.X + rowElement.Bounds.Width / 2f,
-				rowElement.Bounds.Y + rowElement.Bounds.Height / 2f
+				bounds.X + bounds.Width / 2f,
+				bounds.Y + bounds.Height / 2f
 			);
 			batch.Draw(assets.Tilesheet, position, rowElement.Source, tint, 0f, origin, scale, SpriteEffects.None, 1f);
+		}
+
+		private void DrawArrowRowElement(SpriteBatch batch, RowElement rowElement, Rectangle bounds)
+		{
+			float scale = GetRowElementScale(rowElement);
+			Vector2 origin = new(rowElement.Source.Width / 2f, rowElement.Source.Height / 2f);
+			Vector2 position = new(
+				bounds.X + bounds.Width / 2f,
+				bounds.Y + bounds.Height / 2f
+			);
+			batch.Draw(Game1.mouseCursors, position, rowElement.Source, Color.White, 0f, origin, scale, SpriteEffects.None, 1f);
+		}
+
+		private static void DrawAvatarRowElement(SpriteBatch batch, Rectangle bounds)
+		{
+			if (Game1.player == null)
+			{
+				return;
+			}
+
+			Game1.player.FarmerRenderer.drawMiniPortrat(batch, new Vector2(bounds.X, bounds.Y - 3), 0.8f, 1f, 1, Game1.player);
+		}
+
+		private void DrawCuePreview(SpriteBatch batch, StardropPoolAssets assets, RowElement rowElement, Rectangle bounds)
+		{
+			Rectangle previewSource = new(
+				rowElement.Source.X,
+				rowElement.Source.Y + _selectedCueIndex * 2,
+				rowElement.Source.Width,
+				2
+			);
+			Rectangle destination = new(
+				bounds.X,
+				bounds.Y + (bounds.Height - previewSource.Height) / 2 - 1,
+				bounds.Width,
+				previewSource.Height
+			);
+			Rectangle shadowDestination = new(destination.X + 1, destination.Y + 1, destination.Width, destination.Height);
+			batch.Draw(assets.Tilesheet, shadowDestination, previewSource, Color.Black * 0.35f);
+			batch.Draw(assets.Tilesheet, destination, previewSource, Color.White);
 		}
 
 		private Color GetRowElementTint(RowElement rowElement)
@@ -994,8 +1109,8 @@ namespace StardropPoolMinigameRev.Scenes
 		{
 			return rowElement.Type switch
 			{
-				RowElementType.Button when isHovered => 1f + ButtonHoverExpansion / rowElement.Bounds.Width,
-				RowElementType.Arrow when isPressed => Math.Max(0.1f, 1f - 1f / rowElement.Bounds.Width),
+				RowElementType.Button when isHovered => 1f + ButtonHoverExpansion / rowElement.Size.X,
+				RowElementType.Arrow when isPressed => Math.Max(0.1f, 1f - 1f / rowElement.Size.X),
 				_ => 1f
 			};
 		}
@@ -1005,7 +1120,12 @@ namespace StardropPoolMinigameRev.Scenes
 			Point point = ToPoint(logicalPosition);
 			for (int i = 0; i < _rowElements.Count; i++)
 			{
-				if (_rowElements[i].Bounds.Contains(point))
+				if (_rowElements[i].Type == RowElementType.FlexibleSpace || _rowElements[i].Type == RowElementType.Space || _rowElements[i].Type == RowElementType.Avatar)
+				{
+					continue;
+				}
+
+				if (GetRowElementBounds(_rowElements[i]).Contains(point))
 				{
 					return i;
 				}
@@ -1021,6 +1141,25 @@ namespace StardropPoolMinigameRev.Scenes
 			{
 				Game1.playSound("bigDeSelect");
 			}
+			else if (rowElement.Type == RowElementType.Arrow)
+			{
+				Game1.playSound("shwip");
+			}
+		}
+
+		private Rectangle GetSelectedCueSource()
+		{
+			return CueSources[_selectedCueIndex];
+		}
+
+		private void SelectPreviousCue()
+		{
+			_selectedCueIndex = (_selectedCueIndex + CueSources.Length - 1) % CueSources.Length;
+		}
+
+		private void SelectNextCue()
+		{
+			_selectedCueIndex = (_selectedCueIndex + 1) % CueSources.Length;
 		}
 
 		private void ReturnToMainMenu()
@@ -1058,6 +1197,48 @@ namespace StardropPoolMinigameRev.Scenes
 			return new Point((int)MathF.Floor(logicalPosition.X), (int)MathF.Floor(logicalPosition.Y));
 		}
 
+		private static bool IsWithinFelt(Vector2 logicalPosition)
+		{
+			return logicalPosition.X >= CollisionLeft
+				&& logicalPosition.X < CollisionRight
+				&& logicalPosition.Y >= CollisionTop
+				&& logicalPosition.Y < CollisionBottom;
+		}
+
+		private Rectangle GetRowElementBounds(RowElement rowElement)
+		{
+			int spacerIndex = _rowElements.FindIndex(element => element.Type == RowElementType.FlexibleSpace);
+			int rowElementIndex = _rowElements.IndexOf(rowElement);
+			int leftX = ButtonColumnOrigin.X;
+			int rightX = MinigameViewport.LogicalWidth - ButtonColumnOrigin.X;
+
+			if (spacerIndex < 0 || rowElementIndex < spacerIndex)
+			{
+				for (int i = 0; i < rowElementIndex; i++)
+				{
+					RowElement element = _rowElements[i];
+					if (element.Type != RowElementType.FlexibleSpace)
+					{
+						leftX += element.Size.X + ButtonColumnItemSpacing;
+					}
+				}
+
+				return new Rectangle(leftX, ButtonColumnOrigin.Y + (RowContainerHeight - rowElement.Size.Y) / 2, rowElement.Size.X, rowElement.Size.Y);
+			}
+
+			for (int i = _rowElements.Count - 1; i > rowElementIndex; i--)
+			{
+				RowElement element = _rowElements[i];
+				if (element.Type != RowElementType.FlexibleSpace)
+				{
+					rightX -= element.Size.X;
+					rightX -= ButtonColumnItemSpacing;
+				}
+			}
+
+			return new Rectangle(rightX - rowElement.Size.X, ButtonColumnOrigin.Y + (RowContainerHeight - rowElement.Size.Y) / 2, rowElement.Size.X, rowElement.Size.Y);
+		}
+
 		private static float Approach(float current, float target, float amount)
 		{
 			if (current < target)
@@ -1087,23 +1268,16 @@ namespace StardropPoolMinigameRev.Scenes
 			cue.Play();
 		}
 
-		private static Rectangle GetButtonColumnItemBounds(int index)
-		{
-			return new Rectangle(
-				ButtonColumnOrigin.X + index * (ButtonColumnItemSize.X + ButtonColumnItemSpacing),
-				ButtonColumnOrigin.Y,
-				ButtonColumnItemSize.X,
-				ButtonColumnItemSize.Y
-			);
-		}
-
-		private sealed record RowElement(int Index, RowElementType Type, Rectangle Source, Rectangle Bounds, Action? OnActivate);
+		private sealed record RowElement(string Id, RowElementType Type, Rectangle Source, Point Size, Action? OnActivate);
 
 		private enum RowElementType
 		{
 			Button,
 			Idle,
-			Arrow
+			Arrow,
+			Space,
+			FlexibleSpace,
+			Avatar
 		}
 
 		private static void DrawBall(SpriteBatch batch, StardropPoolAssets assets, PoolBall ball)
