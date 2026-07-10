@@ -152,7 +152,7 @@ namespace StardropPoolMinigameRev.Scenes
 					ball.Position = originalPosition;
 				}
 
-				Vector2 avatarPosition = new(capsule.Right - AvatarCapsulePadding - AvatarSize.X, bounds.Y - 3);
+				Vector2 avatarPosition = new(capsule.Right - AvatarCapsulePadding - AvatarSize.X, bounds.Y);
 				DrawAvatarPortrait(batch, entry, avatarPosition, entry.PlayerIndex == _activePlayerIndex);
 				right = capsule.X - AvatarGroupGap;
 			}
@@ -341,9 +341,16 @@ namespace StardropPoolMinigameRev.Scenes
 
 			if (entry.Npc?.Sprite?.Texture != null)
 			{
-				Rectangle source = entry.Npc.getMugShotSourceRect();
+				Rectangle source = GetNpcAvatarSource(entry.Npc);
 				batch.Draw(entry.Npc.Sprite.Texture, new Rectangle((int)MathF.Round(position.X), (int)MathF.Round(position.Y), AvatarSize.X, AvatarSize.Y), source, colour);
 			}
+		}
+
+		private static Rectangle GetNpcAvatarSource(NPC npc)
+		{
+			Rectangle mugShot = npc.getMugShotSourceRect();
+			int size = Math.Min(mugShot.Width, mugShot.Height);
+			return new Rectangle(mugShot.X, mugShot.Y, size, size);
 		}
 
 		private void DrawCuePreview(SpriteBatch batch, StardropPoolAssets assets, RowElement rowElement, Rectangle bounds)
