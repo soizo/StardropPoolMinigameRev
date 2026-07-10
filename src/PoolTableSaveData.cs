@@ -3,6 +3,8 @@ namespace StardropPoolMinigameRev
     internal sealed class PoolTableSaveData
     {
         public PoolTableSnapshot? CurrentTable { get; set; }
+
+        public List<string> NpcsAtTable { get; set; } = new();
     }
 
     internal sealed class PoolTableSnapshot

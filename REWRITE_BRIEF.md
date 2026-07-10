@@ -18,11 +18,10 @@ All pixel rectangles below are taken verbatim from `TextureConstants.cs` /
 A Stardew Valley SMAPI mod that turns the pool table in the Stardrop Saloon
 into a playable minigame. Right-click the table → launch an `IMinigame` with a
 main menu and an 8-ball game. The rewrite scope is intentionally narrow: only
-single-player mode and NPC-versus mode are in scope. `Gallery` is repurposed
-into a records screen, `Settings` is removed from the in-minigame menu and
-belongs in Generic Mod Config Menu, `SummaryScene` is cut, `DialogueScene` is
-kept but deferred until late, multiplayer is shelved, non-8-ball modes are cut,
-alternate table layouts are cut, and custom cue sticks remain in scope.
+single-player mode and NPC-versus mode are in scope. `Gallery`, `Settings`,
+`SummaryScene`, `Leaderboard`/records, and `DialogueScene` are cut. Multiplayer
+is shelved, non-8-ball modes are cut, alternate table layouts are cut. Custom
+cue sticks remain in scope.
 
 - **Mod type:** SMAPI C# mod (`StardropPoolMinigameRev.dll`) **+** a Content
   Patcher content pack that injects two custom tilesheets.
@@ -257,8 +256,7 @@ pool-table interaction:
   two-option opponent choice UI before entering the minigame.
 - That opponent-choice UI must be internationalised from the start.
 
-Wins/losses/records should be tracked for the supported NPC opponents. Custom
-cue sticks remain in scope as unlockable/customisable content.
+Custom cue sticks remain in scope as unlockable/customisable content.
 
 ---
 
@@ -373,14 +371,12 @@ actually swap `_scene` — currently it fetches but discards the new scene; fix
 this).
 
 **Scenes:**
-- **MainMenuScene** — BarShelves bg, 4 NPC portraits (silhouettes until
-  unlocked), 4 BallButtons (Play, Multiplayer, Gallery, Settings), GameTitle.
-  Plays `SoundConstants.GameTheme`.
+  - **MainMenuScene** — BarShelves bg, GameTitle, two menu buttons (Start, Quit).
 - **GameScene** — table, balls, cue, HUD, popups. **Stub in the original** —
   must be built.
 - **DialogueScene** — pre/post-battle NPC dialogue. **Stub.**
-- **SummaryScene** — post-game results, then back to menu. **Stub.**
-
+  - **DialogueScene** — pre/post-battle NPC dialogue. **Cut.**
+  - **SummaryScene** — post-game results, then back to menu. **Cut.**
 ### MainMenu layout (exact, from `RenderConstants.MainMenuScene`)
 - Screen centre = `GenericTextures.GetMinigameScreenCenter()` = (200, 112).
 - Portraits: `TopMargin = BarShelves.Height − Portrait.Height` = 128 − 64 = 64;
@@ -428,8 +424,6 @@ Currently unused. Wire to GMCM and respect in the renderer/physics.
 
 ### Save data (`SaveJson.cs`) — persist via `helper.Data`/JSON
 - `ArcadeTokens`, `CurrentCue` ("basic"), `UnlockedCues` (comma list, "basic").
-- Per-opponent `Wins`/`Losses`/`Highscore` for Abigail, Gus, Sam, Sebastian
-  (highscore default −1).
 Load on minigame start, save on game end.
 
 ### Sound (`SoundConstants.cs` + `Sounds.cs`)

@@ -13,7 +13,8 @@ namespace StardropPoolMinigameRev.Scenes
 	{
 		None,
 		MainMenu,
-		Game
+		Game,
+		Quit
 	}
 
 	internal interface IMinigameScene
@@ -54,15 +55,12 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float ButtonTextOffset = 2;
 		private static readonly MenuItem[] Items =
 		{
-			new("Play", SpriteRects.Ball.Base.Yellow),
-			new("Multiplayer", SpriteRects.Ball.Base.Orange),
-			new("Gallery", SpriteRects.Ball.Base.Maroon),
-			new("Settings", SpriteRects.Ball.Base.White)
+			new("Start", SpriteRects.Ball.Base.Yellow),
+			new("Quit", SpriteRects.Ball.Base.White)
 		};
 
 		private readonly IMonitor _monitor;
 		private int? _pressedButtonIndex;
-		private Vector2? _lastClick;
 
 		public SceneId PendingTransition { get; private set; }
 
@@ -85,15 +83,10 @@ namespace StardropPoolMinigameRev.Scenes
 			DrawTitle(batch, assets);
 			DrawButtons(batch, assets);
 
-			if (_lastClick.HasValue)
-			{
-				DrawDebugPoint(batch, _lastClick.Value, Color.GreenYellow);
-			}
 		}
 
 		public void ReceiveLeftClick(Vector2 logicalPosition)
 		{
-			_lastClick = logicalPosition;
 
 			int buttonIndex = GetButtonIndexAt(logicalPosition);
 			if (buttonIndex >= 0)
@@ -104,7 +97,6 @@ namespace StardropPoolMinigameRev.Scenes
 				return;
 			}
 
-			_monitor.Log($"Main menu left click at logical {Format(logicalPosition)}.", LogLevel.Info);
 		}
 
 		public void LeftClickHeld(Vector2 logicalPosition)
@@ -122,6 +114,10 @@ namespace StardropPoolMinigameRev.Scenes
 				{
 					PendingTransition = SceneId.Game;
 				}
+				else if (index == 1)
+				{
+					PendingTransition = SceneId.Quit;
+				}
 
 				_pressedButtonIndex = null;
 			}
@@ -129,8 +125,6 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void ReceiveRightClick(Vector2 logicalPosition)
 		{
-			_lastClick = logicalPosition;
-			_monitor.Log($"Main menu right click at logical {Format(logicalPosition)}.", LogLevel.Info);
 		}
 
 		public void ReceiveKeyPress(Keys key)
@@ -275,20 +269,7 @@ namespace StardropPoolMinigameRev.Scenes
 			batch.DrawString(font, text, drawPosition, colour, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
 		}
 
-		private static void DrawDebugPoint(SpriteBatch batch, Vector2 point, Color colour)
-		{
-			batch.Draw(
-				Game1.staminaRect,
-				new Rectangle((int)MathF.Round(point.X) - 1, (int)MathF.Round(point.Y) - 1, 3, 3),
-				Game1.staminaRect.Bounds,
-				colour
-			);
-		}
 
-		private static string Format(Vector2 position)
-		{
-			return $"{{X:{position.X:0.##} Y:{position.Y:0.##}}}";
-		}
 
 		private readonly record struct MenuItem(string Label, Rectangle BallSource);
 	}

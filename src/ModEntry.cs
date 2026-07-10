@@ -1,6 +1,7 @@
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Menus;
 
 namespace StardropPoolMinigameRev
 {
@@ -9,6 +10,7 @@ namespace StardropPoolMinigameRev
         private const string SaveDataKey = "pool-table-state";
 
         private PoolTableSaveData _saveData = new();
+        private bool _waitingForMenuAnswer;
 
         public override void Entry(IModHelper helper)
         {
@@ -16,6 +18,8 @@ namespace StardropPoolMinigameRev
             helper.Events.GameLoop.Saving += OnSaving;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonsChanged += OnButtonsChanged;
+            helper.Events.Display.MenuChanged += OnMenuChanged;
+            PoolTableInteractionMenu.SetMonitor(Monitor);
             Monitor.Log("Stardrop Pool Minigame Rev loaded.", LogLevel.Info);
         }
 
@@ -53,7 +57,21 @@ namespace StardropPoolMinigameRev
             }
 
             Helper.Input.Suppress(e.Button);
-            StartGame();
+
+            if (_waitingForMenuAnswer)
+            {
+                return;
+            }
+
+            var decision = PoolTableInteractionMenu.DetermineInteraction();
+            if (decision != null)
+            {
+                HandleInteractionDecision(decision);
+            }
+            else
+            {
+                _waitingForMenuAnswer = true;
+            }
         }
 
         private void OnButtonsChanged(object? sender, ButtonsChangedEventArgs e)
@@ -89,10 +107,77 @@ namespace StardropPoolMinigameRev
                 && !button.IsActionButton();
         }
 
-        private void StartGame()
+        private void OnMenuChanged(object? sender, MenuChangedEventArgs e)
+        {
+            if (!_waitingForMenuAnswer)
+            {
+                return;
+            }
+
+            if (e.NewMenu != null || e.OldMenu is not DialogueBox dialogueBox)
+            {
+                return;
+            }
+
+            _waitingForMenuAnswer = false;
+
+            if (Game1.currentLocation.lastQuestionKey != "StardropPool_Interaction")
+            {
+                return;
+            }
+
+            int selectedIndex = Helper.Reflection.GetField<int>(dialogueBox, "selectedResponse").GetValue();
+            if (selectedIndex < 0)
+            {
+                return;
+            }
+
+            Response[] responses = dialogueBox.responses;
+            if (selectedIndex >= responses.Length)
+            {
+                return;
+            }
+
+            string answerKey = responses[selectedIndex].responseKey;
+            List<string> npcsAtTable = PoolTableInteractionMenu.GetNpcsAtTable();
+            List<string> eligibleInSaloon = PoolTableInteractionMenu.GetEligibleNpcNamesInSaloon();
+
+            var decision = PoolTableInteractionMenu.ParseAnswer(answerKey, npcsAtTable, eligibleInSaloon);
+            if (decision != null)
+            {
+                HandleInteractionDecision(decision);
+            }
+        }
+
+        private void HandleInteractionDecision(InteractionDecision decision)
+        {
+            switch (decision.Type)
+            {
+                case InteractionType.Solo:
+                    Monitor.Log("Starting solo game.", LogLevel.Info);
+                    StartGame(null);
+                    break;
+
+                case InteractionType.PlayAgainst:
+                    Monitor.Log($"Starting game against {decision.NpcName}.", LogLevel.Info);
+                    StartGame(decision.NpcName);
+                    break;
+
+                case InteractionType.Watch:
+                    Monitor.Log("Watching NPCs play.", LogLevel.Info);
+                    StartGame(null);
+                    break;
+
+                case InteractionType.Leave:
+                    Monitor.Log("Leaving pool table.", LogLevel.Info);
+                    break;
+            }
+        }
+
+        private void StartGame(string? npcOpponentName)
         {
             Monitor.Log("Starting Stardrop Pool minigame from pool table interaction.", LogLevel.Info);
-            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, _saveData.CurrentTable, SaveCurrentTable);
+            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, _saveData.CurrentTable, SaveCurrentTable, npcOpponentName);
         }
 
         private void SaveCurrentTable(PoolTableSnapshot snapshot)

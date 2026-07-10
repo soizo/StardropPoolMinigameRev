@@ -22,6 +22,7 @@ namespace StardropPoolMinigameRev
         private readonly MinigameViewport _viewport;
         private readonly Action<PoolTableSnapshot> _saveSnapshot;
         private readonly bool _isSveInstalled;
+        private readonly string? _npcOpponentName;
         private PoolTableSnapshot? _currentSnapshot;
         private readonly string? _previousMusicTrack;
         private readonly bool _previousMouseVisible;
@@ -32,10 +33,11 @@ namespace StardropPoolMinigameRev
         private Vector2 _lastRawLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
         private Vector2 _capturedLogicalMouse = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
 
-        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot)
+        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot, string? npcOpponentName = null)
         {
             _monitor = monitor;
             _saveSnapshot = saveSnapshot;
+            _npcOpponentName = npcOpponentName;
             _currentSnapshot = snapshot;
             _isSveInstalled = helper.ModRegistry.IsLoaded("FlashShifter.StardewValleyExpandedCP")
                 || helper.ModRegistry.IsLoaded("FlashShifter.SVECode");
@@ -82,6 +84,9 @@ namespace StardropPoolMinigameRev
                     _monitor.Log("Transitioning to main menu.", LogLevel.Info);
                     PersistSceneState();
                     _scene = new MainMenuScene(_monitor);
+                    break;
+                case SceneId.Quit:
+                    QuitMinigame();
                     break;
             }
         }
@@ -175,8 +180,7 @@ namespace StardropPoolMinigameRev
 
             if (key == Keys.Escape)
             {
-                RestoreMouseState();
-                forceQuit();
+                QuitMinigame();
                 return;
             }
 
@@ -222,9 +226,17 @@ namespace StardropPoolMinigameRev
 
         public bool forceQuit()
         {
+            QuitMinigame();
+            return true;
+        }
+
+        private void QuitMinigame()
+        {
+            _monitor.Log("Quitting minigame.", LogLevel.Info);
+            PersistSceneState();
+            RestoreMouseState();
             unload();
             Game1.currentMinigame = null;
-            return true;
         }
 
         private Vector2 GetInputLogicalPosition(int x, int y)
