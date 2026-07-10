@@ -20,6 +20,7 @@ namespace StardropPoolMinigameRev
 
         private static IMonitor? _monitor;
         private static ITranslationHelper? _i18n;
+        private static Action<InteractionDecision>? _onDecision;
         private static readonly Random Random = new();
 
         public static void SetMonitor(IMonitor monitor)
@@ -30,6 +31,11 @@ namespace StardropPoolMinigameRev
         public static void SetTranslationHelper(ITranslationHelper i18n)
         {
             _i18n = i18n;
+        }
+
+        public static void SetDecisionHandler(Action<InteractionDecision> onDecision)
+        {
+            _onDecision = onDecision;
         }
 
         private static void Log(string msg)
@@ -216,7 +222,18 @@ namespace StardropPoolMinigameRev
             }
 
             responses.Add(new Response(ResponseLeave, T("menu.leave")));
-            Game1.currentLocation.createQuestionDialogue(T("menu.question"), responses.ToArray(), DialogKey);
+            Game1.currentLocation.createQuestionDialogue(T("menu.question"), responses.ToArray(), OnMenuDecision);
+        }
+
+        private static void OnMenuDecision(Farmer who, string answerKey)
+        {
+            List<string> npcsAtTable = GetNpcsAtTable();
+            List<string> eligibleInSaloon = GetEligibleNpcNamesInSaloon();
+            InteractionDecision? decision = ParseAnswer(answerKey, npcsAtTable, eligibleInSaloon);
+            if (decision != null)
+            {
+                _onDecision?.Invoke(decision);
+            }
         }
 
         private static List<NPC> GetEligibleNpcsInSaloon(List<string>? npcNamesAtTable = null)

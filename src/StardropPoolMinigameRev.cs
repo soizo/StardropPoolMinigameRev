@@ -53,7 +53,7 @@ namespace StardropPoolMinigameRev
             _assets = new StardropPoolAssets(helper, _monitor);
             _assets.Load();
 
-            _scene = new GameScene(_monitor, snapshot, _isSveInstalled);
+            _scene = new GameScene(_monitor, snapshot, _isSveInstalled, _npcOpponentName);
             _previousMusicTrack = Game1.currentSong?.Name;
             Game1.changeMusicTrack("movieTheater");
 
@@ -80,7 +80,7 @@ namespace StardropPoolMinigameRev
             {
                 case SceneId.Game:
                     _monitor.Log("Transitioning to game scene.", LogLevel.Info);
-                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled);
+                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled, _npcOpponentName);
                     break;
                 case SceneId.MainMenu:
                     _monitor.Log("Transitioning to main menu.", LogLevel.Info);

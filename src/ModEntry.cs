@@ -1,7 +1,6 @@
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
-using StardewValley.Menus;
 
 namespace StardropPoolMinigameRev
 {
@@ -18,20 +17,20 @@ namespace StardropPoolMinigameRev
 
         private PoolTableSaveData _saveData = new();
         private ModConfig _config = new();
-        private bool _waitingForMenuAnswer;
 
         public override void Entry(IModHelper helper)
         {
             _config = helper.ReadConfig<ModConfig>();
 
             helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            helper.Events.GameLoop.DayStarted += OnDayStarted;
             helper.Events.GameLoop.Saving += OnSaving;
             helper.Events.GameLoop.GameLaunched += OnGameLaunched;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonsChanged += OnButtonsChanged;
-            helper.Events.Display.MenuChanged += OnMenuChanged;
             PoolTableInteractionMenu.SetMonitor(Monitor);
             PoolTableInteractionMenu.SetTranslationHelper(Helper.Translation);
+            PoolTableInteractionMenu.SetDecisionHandler(HandleInteractionDecision);
             Monitor.Log("Stardrop Pool Minigame Rev loaded.", LogLevel.Info);
         }
 
@@ -70,19 +69,10 @@ namespace StardropPoolMinigameRev
 
             Helper.Input.Suppress(e.Button);
 
-            if (_waitingForMenuAnswer)
-            {
-                return;
-            }
-
             var decision = PoolTableInteractionMenu.DetermineInteraction(_config.InteractionMode);
             if (decision != null)
             {
                 HandleInteractionDecision(decision);
-            }
-            else
-            {
-                _waitingForMenuAnswer = true;
             }
         }
 
@@ -105,6 +95,28 @@ namespace StardropPoolMinigameRev
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
             _saveData = Helper.Data.ReadSaveData<PoolTableSaveData>(SaveDataKey) ?? new PoolTableSaveData();
+            ExpirePreviousDayTable();
+        }
+
+        private void OnDayStarted(object? sender, DayStartedEventArgs e)
+        {
+            ExpirePreviousDayTable();
+        }
+
+        private void ExpirePreviousDayTable()
+        {
+            int today = GetCurrentDayId();
+            if (_saveData.CurrentTable != null && _saveData.CurrentTableDay != today)
+            {
+                Monitor.Log("Resetting saved pool table state for the new day.", LogLevel.Info);
+                _saveData.CurrentTable = null;
+                _saveData.CurrentTableDay = 0;
+            }
+        }
+
+        private static int GetCurrentDayId()
+        {
+            return Game1.Date.TotalDays;
         }
 
         private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
@@ -168,48 +180,6 @@ namespace StardropPoolMinigameRev
                 && !button.IsActionButton();
         }
 
-        private void OnMenuChanged(object? sender, MenuChangedEventArgs e)
-        {
-            if (!_waitingForMenuAnswer)
-            {
-                return;
-            }
-
-            if (e.NewMenu != null || e.OldMenu is not DialogueBox dialogueBox)
-            {
-                return;
-            }
-
-            _waitingForMenuAnswer = false;
-
-            if (Game1.currentLocation.lastQuestionKey != "StardropPool_Interaction")
-            {
-                return;
-            }
-
-            int selectedIndex = Helper.Reflection.GetField<int>(dialogueBox, "selectedResponse").GetValue();
-            if (selectedIndex < 0)
-            {
-                return;
-            }
-
-            Response[] responses = dialogueBox.responses;
-            if (selectedIndex >= responses.Length)
-            {
-                return;
-            }
-
-            string answerKey = responses[selectedIndex].responseKey;
-            List<string> npcsAtTable = PoolTableInteractionMenu.GetNpcsAtTable();
-            List<string> eligibleInSaloon = PoolTableInteractionMenu.GetEligibleNpcNamesInSaloon();
-
-            var decision = PoolTableInteractionMenu.ParseAnswer(answerKey, npcsAtTable, eligibleInSaloon);
-            if (decision != null)
-            {
-                HandleInteractionDecision(decision);
-            }
-        }
-
         private void HandleInteractionDecision(InteractionDecision decision)
         {
             switch (decision.Type)
@@ -244,6 +214,7 @@ namespace StardropPoolMinigameRev
         private void SaveCurrentTable(PoolTableSnapshot snapshot)
         {
             _saveData.CurrentTable = snapshot;
+            _saveData.CurrentTableDay = GetCurrentDayId();
         }
     }
 }
