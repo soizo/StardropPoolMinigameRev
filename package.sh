@@ -16,16 +16,16 @@ dotnet build "$PROJECT" -c Release
 
 cp "$ROOT/manifest.json" "$DLL_DIR/manifest.json"
 cp "$BUILD_DIR/StardropPoolMinigameRev.dll" "$DLL_DIR/StardropPoolMinigameRev.dll"
+cp -R "$ROOT/i18n" "$DLL_DIR/i18n"
 if [ -f "$BUILD_DIR/StardropPoolMinigameRev.pdb" ]; then
   cp "$BUILD_DIR/StardropPoolMinigameRev.pdb" "$DLL_DIR/StardropPoolMinigameRev.pdb"
 fi
 
-# The DLL mod keeps a copy of the two PNGs as a cross-platform fallback. Content
-# Patcher should provide these as game assets, but the minigame can still render
-# if the CP pack is missing or has not registered yet.
+# The DLL mod keeps a copy of the pool tilesheet as a cross-platform fallback.
+# Content Patcher should provide it as a game asset, but the minigame can still
+# render if the CP pack is missing or has not registered yet.
 mkdir -p "$DLL_DIR/Assets/Tilesheets"
 cp "$CP_SOURCE/Assets/Tilesheets/stardropPool.png" "$DLL_DIR/Assets/Tilesheets/stardropPool.png"
-cp "$CP_SOURCE/Assets/Tilesheets/stardropPoolFont.png" "$DLL_DIR/Assets/Tilesheets/stardropPoolFont.png"
 
 # SMAPI stops descending into a folder once it finds a manifest.json, so the DLL
 # mod and its Content Patcher pack must be sibling subfolders under a parent that

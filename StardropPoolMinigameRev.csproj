@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <EnableModDeploy>false</EnableModDeploy>
+    <EnableModDeploy>true</EnableModDeploy>
     <EnableModZip>false</EnableModZip>
   </PropertyGroup>
 
@@ -17,5 +17,19 @@
   <ItemGroup>
     <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.2" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="i18n\default.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="[CP] StardropPoolMinigameRev\Assets\Tilesheets\stardropPool.png" Link="Assets\Tilesheets\stardropPool.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="RemoveUnusedTilesheetFallbacks" BeforeTargets="AfterBuild">
+    <Delete Files="$(TargetDir)Assets/Tilesheets/stardropPoolFont.png" />
+    <Delete Files="$(GameModsPath)/$(ModFolderName)/Assets/Tilesheets/stardropPoolFont.png" />
+  </Target>
 
 </Project>

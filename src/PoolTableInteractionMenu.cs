@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using StardewModdingAPI;
 using StardewValley;
 
 namespace StardropPoolMinigameRev
@@ -17,7 +18,29 @@ namespace StardropPoolMinigameRev
         private const string ResponsePlayPrefix = "play_";
         private const string ResponseLeave = "leave";
 
-        private static readonly Rectangle PoolTableZone = new(35, 17, 8, 7);
+        private static IMonitor? _monitor;
+        private static ITranslationHelper? _i18n;
+        private static readonly Random Random = new();
+
+        public static void SetMonitor(IMonitor monitor)
+        {
+            _monitor = monitor;
+        }
+
+        public static void SetTranslationHelper(ITranslationHelper i18n)
+        {
+            _i18n = i18n;
+        }
+
+        private static void Log(string msg)
+        {
+            _monitor?.Log(msg, LogLevel.Info);
+        }
+
+        private static string T(string key, object? tokens = null)
+        {
+            return _i18n?.Get(key, tokens) ?? key;
+        }
 
         public static InteractionDecision? DetermineInteraction()
         {
@@ -33,16 +56,58 @@ namespace StardropPoolMinigameRev
             return null;
         }
 
-        private static StardewModdingAPI.IMonitor? _monitor;
-
-        public static void SetMonitor(StardewModdingAPI.IMonitor monitor)
+        public static InteractionDecision? DetermineInteraction(PoolTableInteractionMode mode)
         {
-            _monitor = monitor;
+            List<string> npcsAtTable = DetectNpcsNearPoolTable();
+            List<NPC> eligibleInSaloon = GetEligibleNpcsInSaloon(npcNamesAtTable: npcsAtTable);
+
+            InteractionDecision? configuredDecision = TryGetConfiguredDecision(mode, npcsAtTable, eligibleInSaloon);
+            if (configuredDecision != null)
+            {
+                return configuredDecision;
+            }
+
+            if (npcsAtTable.Count == 0 && eligibleInSaloon.Count == 0)
+            {
+                return new InteractionDecision(InteractionType.Solo, null);
+            }
+
+            ShowMenu(npcsAtTable, eligibleInSaloon);
+            return null;
         }
 
-        private static void Log(string msg)
+        private static InteractionDecision? TryGetConfiguredDecision(PoolTableInteractionMode mode, List<string> npcsAtTable, List<NPC> eligibleInSaloon)
         {
-            _monitor?.Log(msg, StardewModdingAPI.LogLevel.Info);
+            return mode switch
+            {
+                PoolTableInteractionMode.Default => null,
+                PoolTableInteractionMode.AlwaysSolo => new InteractionDecision(InteractionType.Solo, null),
+                PoolTableInteractionMode.AlwaysVsNpc => TryGetRandomNpcDecision(npcsAtTable, eligibleInSaloon),
+                PoolTableInteractionMode.AlwaysWatch => npcsAtTable.Count >= 2
+                    ? new InteractionDecision(InteractionType.Watch, null)
+                    : null,
+                _ => null
+            };
+        }
+
+        private static InteractionDecision? TryGetRandomNpcDecision(List<string> npcsAtTable, List<NPC> eligibleInSaloon)
+        {
+            if (npcsAtTable.Count > 0)
+            {
+                return new InteractionDecision(InteractionType.PlayAgainst, PickRandom(npcsAtTable));
+            }
+
+            if (eligibleInSaloon.Count > 0)
+            {
+                return new InteractionDecision(InteractionType.PlayAgainst, PickRandom(eligibleInSaloon).Name);
+            }
+
+            return null;
+        }
+
+        private static T PickRandom<T>(IReadOnlyList<T> values)
+        {
+            return values[Random.Next(values.Count)];
         }
 
         public static List<string> DetectNpcsNearPoolTable()
@@ -68,24 +133,18 @@ namespace StardropPoolMinigameRev
 
                 string? locationName = npc.currentLocation.NameOrUniqueName;
                 Point tile = npc.TilePoint;
-                Log($"[PoolTable] {npcName}: loc='{locationName}', tile=({tile.X},{tile.Y}), inZone={PoolTableZone.Contains(tile.X, tile.Y)}");
+                bool isNearTable = PoolTableDetector.IsNearPoolTable(npc.currentLocation, tile);
+                bool isPlayingAnimation = npc.Sprite.CurrentAnimation != null
+                    || npc.Sprite.currentAnimationIndex > 0;
+
+                Log($"[PoolTable] {npcName}: loc='{locationName}', tile=({tile.X},{tile.Y}), nearTable={isNearTable}, animation={isPlayingAnimation}, facing={npc.FacingDirection}");
 
                 if (locationName == null || !locationName.Equals("Saloon", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (!PoolTableZone.Contains(tile.X, tile.Y))
-                {
-                    continue;
-                }
-
-                bool isPlayingAnimation = npc.Sprite.CurrentAnimation != null
-                    || npc.Sprite.currentAnimationIndex > 0;
-
-                Log($"[PoolTable] {npcName}: animation={isPlayingAnimation}");
-
-                if (!isPlayingAnimation)
+                if (!isNearTable)
                 {
                     continue;
                 }
@@ -133,31 +192,31 @@ namespace StardropPoolMinigameRev
 
             if (npcsAtTable.Count >= 2)
             {
-                responses.Add(new Response(ResponseWatch, "Watch them play"));
+                responses.Add(new Response(ResponseWatch, T("menu.watch")));
                 foreach (string npcName in npcsAtTable)
                 {
                     string displayName = GetNpcDisplayName(npcName);
-                    responses.Add(new Response($"{ResponsePlayPrefix}{npcName}", $"Play against {displayName}"));
+                    responses.Add(new Response($"{ResponsePlayPrefix}{npcName}", T("menu.play-against", new { npcName = displayName })));
                 }
             }
             else if (npcsAtTable.Count == 1)
             {
                 string npcName = npcsAtTable[0];
                 string displayName = GetNpcDisplayName(npcName);
-                responses.Add(new Response($"{ResponsePlayPrefix}{npcName}", $"Play against {displayName}"));
+                responses.Add(new Response($"{ResponsePlayPrefix}{npcName}", T("menu.play-against", new { npcName = displayName })));
             }
             else
             {
-                responses.Add(new Response(ResponseSolo, "Play solo"));
+                responses.Add(new Response(ResponseSolo, T("menu.play-solo")));
                 foreach (NPC npc in eligibleInSaloon)
                 {
                     string displayName = npc.displayName ?? npc.Name;
-                    responses.Add(new Response($"{ResponsePlayPrefix}{npc.Name}", $"Invite {displayName}"));
+                    responses.Add(new Response($"{ResponsePlayPrefix}{npc.Name}", T("menu.invite", new { npcName = displayName })));
                 }
             }
 
-            responses.Add(new Response(ResponseLeave, "Leave"));
-            Game1.currentLocation.createQuestionDialogue("What would you like to do?", responses.ToArray(), DialogKey);
+            responses.Add(new Response(ResponseLeave, T("menu.leave")));
+            Game1.currentLocation.createQuestionDialogue(T("menu.question"), responses.ToArray(), DialogKey);
         }
 
         private static List<NPC> GetEligibleNpcsInSaloon(List<string>? npcNamesAtTable = null)

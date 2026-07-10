@@ -55,11 +55,12 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float ButtonTextOffset = 2;
 		private static readonly MenuItem[] Items =
 		{
-			new("Start", SpriteRects.Ball.Base.Yellow),
-			new("Quit", SpriteRects.Ball.Base.White)
+			new("menu.start", SpriteRects.Ball.Base.Yellow),
+			new("menu.quit", SpriteRects.Ball.Base.White)
 		};
 
 		private readonly IMonitor _monitor;
+		private readonly ITranslationHelper _i18n;
 		private int? _pressedButtonIndex;
 
 		public SceneId PendingTransition { get; private set; }
@@ -68,9 +69,10 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public Vector2? MouseReleaseLogicalPosition => null;
 
-		public MainMenuScene(IMonitor monitor)
+		public MainMenuScene(IMonitor monitor, ITranslationHelper i18n)
 		{
 			_monitor = monitor;
+			_i18n = i18n;
 		}
 
 		public void Update(GameTime time)
@@ -161,11 +163,11 @@ namespace StardropPoolMinigameRev.Scenes
 		private void DrawButtons(SpriteBatch batch, StardropPoolAssets assets)
 		{
 			SpriteFont buttonFont = GetButtonFont();
-			Rectangle[] buttonBounds = GetButtonBounds(buttonFont);
+			Rectangle[] buttonBounds = GetButtonBounds(buttonFont, _i18n);
 
 			for (int i = 0; i < Items.Length; i++)
 			{
-				DrawButton(batch, assets, Items[i], buttonBounds[i], buttonFont, _pressedButtonIndex == i);
+				DrawButton(batch, assets, Items[i], buttonBounds[i], buttonFont, _pressedButtonIndex == i, _i18n);
 			}
 		}
 
@@ -174,9 +176,9 @@ namespace StardropPoolMinigameRev.Scenes
 			return Game1.dialogueFont;
 		}
 
-		private static Rectangle[] GetButtonBounds(SpriteFont font)
+		private static Rectangle[] GetButtonBounds(SpriteFont font, ITranslationHelper i18n)
 		{
-			int buttonWidth = GetButtonWidth(font);
+			int buttonWidth = GetButtonWidth(font, i18n);
 			int groupHeight = Items.Length * ButtonHeight + (Items.Length - 1) * ButtonGap;
 			int availableHeight = MinigameViewport.LogicalHeight - BarBackgroundHeight;
 			int x = (MinigameViewport.LogicalWidth - buttonWidth) / 2;
@@ -194,7 +196,7 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private int GetButtonIndexAt(Vector2 logicalPosition)
 		{
-			Rectangle[] buttonBounds = GetButtonBounds(GetButtonFont());
+			Rectangle[] buttonBounds = GetButtonBounds(GetButtonFont(), _i18n);
 			Point point = new((int)MathF.Floor(logicalPosition.X), (int)MathF.Floor(logicalPosition.Y));
 
 			for (int i = 0; i < buttonBounds.Length; i++)
@@ -208,19 +210,24 @@ namespace StardropPoolMinigameRev.Scenes
 			return -1;
 		}
 
-		private static int GetButtonWidth(SpriteFont font)
+		private static string T(ITranslationHelper i18n, string key)
+		{
+			return i18n.Get(key).Default(key);
+		}
+
+		private static int GetButtonWidth(SpriteFont font, ITranslationHelper i18n)
 		{
 			float widestLabel = 0f;
 			foreach (MenuItem item in Items)
 			{
-				widestLabel = MathF.Max(widestLabel, font.MeasureString(item.Label).X * ButtonTextScale);
+				widestLabel = MathF.Max(widestLabel, font.MeasureString(T(i18n, item.Label)).X * ButtonTextScale);
 			}
 
 			int contentWidth = ButtonIconInset + ButtonIconWidth + ButtonTextGap + (int)MathF.Ceiling(widestLabel) + ButtonRightPadding;
 			return Math.Max(96, contentWidth);
 		}
 
-		private static void DrawButton(SpriteBatch batch, StardropPoolAssets assets, MenuItem item, Rectangle bounds, SpriteFont font, bool isPressed)
+		private static void DrawButton(SpriteBatch batch, StardropPoolAssets assets, MenuItem item, Rectangle bounds, SpriteFont font, bool isPressed, ITranslationHelper i18n)
 		{
 			Color outerColour = isPressed ? new Color(22, 11, 19) : new Color(30, 15, 25);
 			Color bevelColour = isPressed ? new Color(82, 45, 48) : new Color(120, 72, 62);
@@ -250,7 +257,7 @@ namespace StardropPoolMinigameRev.Scenes
 			batch.Draw(assets.Tilesheet, iconBounds, SpriteRects.Ball.Highlight, Color.White * 0.7f);
 
 			int labelLeft = bounds.X + ButtonIconInset + ButtonIconWidth + ButtonTextGap;
-			DrawLeftAlignedText(batch, font, item.Label, new Vector2(labelLeft, bounds.Center.Y + ButtonTextOffset), new Color(255, 238, 209), ButtonTextScale, shadow: true);
+			DrawLeftAlignedText(batch, font, T(i18n, item.Label), new Vector2(labelLeft, bounds.Center.Y + ButtonTextOffset), new Color(255, 238, 209), ButtonTextScale, shadow: true);
 		}
 
 		private static void DrawLeftAlignedText(SpriteBatch batch, SpriteFont font, string text, Vector2 leftCentre, Color colour, float scale, bool shadow)

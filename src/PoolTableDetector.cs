@@ -34,6 +34,32 @@ namespace StardropPoolMinigameRev
 			return IsPoolTableTile(location, (int)cursorTile.X, (int)cursorTile.Y);
 		}
 
+		public static bool IsNearPoolTable(GameLocation location, Point tile)
+		{
+			if (location.NameOrUniqueName != "Saloon")
+			{
+				return false;
+			}
+
+			for (int y = tile.Y - 1; y <= tile.Y + 1; y++)
+			{
+				for (int x = tile.X - 1; x <= tile.X + 1; x++)
+				{
+					if (x == tile.X && y == tile.Y)
+					{
+						continue;
+					}
+
+					if (IsPoolTableTile(location, x, y))
+					{
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
 		private static bool IsPoolTableTile(GameLocation location, int x, int y)
 		{
 			return HasTileId(location, "Buildings", x, y, BuildingTileIds)

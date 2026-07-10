@@ -21,6 +21,7 @@ namespace StardropPoolMinigameRev
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
         private readonly Action<PoolTableSnapshot> _saveSnapshot;
+        private readonly ITranslationHelper _i18n;
         private readonly bool _isSveInstalled;
         private readonly string? _npcOpponentName;
         private PoolTableSnapshot? _currentSnapshot;
@@ -37,6 +38,7 @@ namespace StardropPoolMinigameRev
         {
             _monitor = monitor;
             _saveSnapshot = saveSnapshot;
+            _i18n = helper.Translation;
             _npcOpponentName = npcOpponentName;
             _currentSnapshot = snapshot;
             _isSveInstalled = helper.ModRegistry.IsLoaded("FlashShifter.StardewValleyExpandedCP")
@@ -83,7 +85,7 @@ namespace StardropPoolMinigameRev
                 case SceneId.MainMenu:
                     _monitor.Log("Transitioning to main menu.", LogLevel.Info);
                     PersistSceneState();
-                    _scene = new MainMenuScene(_monitor);
+                    _scene = new MainMenuScene(_monitor, _i18n);
                     break;
                 case SceneId.Quit:
                     QuitMinigame();

@@ -17,12 +17,9 @@ namespace StardropPoolMinigameRev.Assets
 
         public Texture2D Tilesheet { get; private set; } = null!;
 
-        public Texture2D Font { get; private set; } = null!;
-
         public void Load()
         {
             Tilesheet = LoadTexture("Minigames/stardropPool", "Assets/Tilesheets/stardropPool.png");
-            Font = LoadTexture("Minigames/stardropPoolFont", "Assets/Tilesheets/stardropPoolFont.png");
         }
 
         private Texture2D LoadTexture(string gameAssetName, string modAssetPath)
@@ -35,7 +32,7 @@ namespace StardropPoolMinigameRev.Assets
             }
             catch (Exception ex)
             {
-                _monitor.Log($"Could not load {gameAssetName} from game content ({ex.GetType().Name}). Falling back to bundled PNG {modAssetPath}.", LogLevel.Warn);
+                _monitor.Log($"Could not load {gameAssetName} from game content ({ex.GetType().Name}). Falling back to bundled PNG {modAssetPath}.", LogLevel.Trace);
                 return _helper.ModContent.Load<Texture2D>(modAssetPath);
             }
         }
