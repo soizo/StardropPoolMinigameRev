@@ -45,6 +45,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float AimGrabRadius = 18f;
 		private const float MaxPullDistance = 72f;
 		private const float ShotPower = 7.5f;
+		private const float NpcShotThinkMilliseconds = 700f;
 		private const float FrictionPerSecond = 150f;
 		private const float WallRestitution = 0.92f;
 		private const float BallRestitution = 0.96f;
@@ -142,6 +143,15 @@ namespace StardropPoolMinigameRev.Scenes
 		private static readonly Rectangle[,] TableFrontSources = CreateTableSources(back: false);
 
 		private static readonly Vector2 CueBallStart = new(CollisionLeft + (CollisionRight - CollisionLeft) * 0.25f, CollisionCentreY);
+		private static readonly Vector2[] PocketCentres =
+		{
+			new(PocketWestX, PocketNorthY),
+			new(PocketMiddleX, PocketNorthY),
+			new(PocketEastX, PocketNorthY),
+			new(PocketWestX, PocketSouthY),
+			new(PocketMiddleX, PocketSouthY),
+			new(PocketEastX, PocketSouthY)
+		};
 
 		private readonly IMonitor _monitor;
 		private readonly List<PoolBall> _balls = new();
@@ -150,6 +160,9 @@ namespace StardropPoolMinigameRev.Scenes
 		private readonly Dictionary<int, float> _rowElementScales = new();
 		private readonly bool _isSveInstalled;
 		private readonly string? _npcOpponentName;
+		private readonly string? _npcPlayerName;
+		private readonly PoolNpcProfiles _profiles;
+		private readonly Random _cueRandom = new();
 		private MinigameViewport? _viewport;
 		private RenderTarget2D? _avatarPortraitTarget;
 		private Texture2D? _avatarOutlineTexture;
@@ -159,6 +172,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private bool _isPressingRowElement;
 		private int _pressedRowElementIndex = -1;
 		private int _selectedCueIndex;
+		private readonly Dictionary<int, int> _participantCueIndices = new();
 		private bool _isAiming;
 		private Vector2 _aimStartPosition;
 		private Vector2 _aimPosition;
@@ -174,25 +188,33 @@ namespace StardropPoolMinigameRev.Scenes
 		private int _shots;
 		private int _pocketed;
 		private int _activePlayerIndex;
+		private int _playerAssignedBallType;
+		private float _activeShotPower = ShotPower;
+		private bool _currentShotScored;
+		private double _npcThinkMilliseconds;
+		private bool _isNpcShotQueued;
 		private double _scratchMessageMilliseconds;
 		private int _lastPocketedEntryCount;
 
-		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot, bool isSveInstalled, string? npcOpponentName = null)
+		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot, bool isSveInstalled, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null)
 		{
 			_monitor = monitor;
 			_isSveInstalled = isSveInstalled;
 			_npcOpponentName = npcOpponentName;
+			_npcPlayerName = npcPlayerName;
+			_profiles = profiles ?? new PoolNpcProfiles();
 			_isGaldoraTheme = DetectGaldoraTheme();
 			InitialiseRowElements();
 			ResetRack();
+			InitialiseMatchParticipants();
 			LoadSnapshot(snapshot);
 		}
 
 		public SceneId PendingTransition { get; private set; }
 
-		public bool CapturesMouse => _isAiming || _isCueStriking || _showCueAfterStrike;
+		public bool CapturesMouse => IsHumanTurn() && (_isAiming || _isCueStriking || _showCueAfterStrike);
 
-		public Vector2? MouseReleaseLogicalPosition => (_isCueStriking || _showCueAfterStrike) ? _strikeCueBallPosition : null;
+		public Vector2? MouseReleaseLogicalPosition => CapturesMouse ? _strikeCueBallPosition : null;
 
 		public void Update(GameTime time)
 		{
@@ -206,6 +228,7 @@ namespace StardropPoolMinigameRev.Scenes
 
 			UpdateRowElementScales();
 			UpdatePocketedBallHudMotion();
+			UpdateNpcTurn(time);
 			if (_scratchMessageMilliseconds > 0)
 			{
 				_scratchMessageMilliseconds = Math.Max(0, _scratchMessageMilliseconds - time.ElapsedGameTime.TotalMilliseconds);
@@ -264,7 +287,7 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 
 			PoolBall? cueBall = GetCueBall();
-			if (cueBall == null || AreBallsMoving() || _isCueStriking || !IsWithinFelt(logicalPosition))
+			if (cueBall == null || IsNpcTurn() || AreBallsMoving() || _isCueStriking || !IsWithinFelt(logicalPosition))
 			{
 				return;
 			}
@@ -298,6 +321,11 @@ namespace StardropPoolMinigameRev.Scenes
 				return;
 			}
 
+			if (IsNpcTurn())
+			{
+				return;
+			}
+
 			if (!_isAiming)
 			{
 				return;
@@ -324,6 +352,7 @@ namespace StardropPoolMinigameRev.Scenes
 			_showCueAfterStrike = false;
 			_isWaitingForShotToSettle = false;
 			_hasCueStruckBall = false;
+			_currentShotScored = false;
 			_strikeMilliseconds = 0;
 			_strikeDurationMilliseconds = 0;
 			AdvanceUntilSettled();
@@ -336,14 +365,166 @@ namespace StardropPoolMinigameRev.Scenes
 			_showCueAfterStrike = false;
 			_isWaitingForShotToSettle = false;
 			_hasCueStruckBall = false;
+			_currentShotScored = false;
 			_strikeMilliseconds = 0;
 			_strikeDurationMilliseconds = 0;
 			_scratchMessageMilliseconds = 0;
 			_shots = 0;
 			_pocketed = 0;
 			_activePlayerIndex = 0;
+			_playerAssignedBallType = 0;
+			_npcThinkMilliseconds = 0;
+			_isNpcShotQueued = false;
 			_pocketedBallEntries.Clear();
 			ResetRack();
+			InitialiseMatchParticipants();
+		}
+
+		private void InitialiseMatchParticipants()
+		{
+			List<AvatarHudEntry> entries = GetAvatarHudEntries();
+			if (entries.Count > 1)
+			{
+				_activePlayerIndex = _cueRandom.Next(entries.Count);
+			}
+
+			ResolveParticipantCues(playerHasPriority: IsHumanTurn(), randomisePlayerCue: true);
+		}
+
+		private void ResolveParticipantCues(bool playerHasPriority, bool randomisePlayerCue = false)
+		{
+			List<AvatarHudEntry> entries = GetAvatarHudEntries();
+			_participantCueIndices.Clear();
+			if (HasHumanParticipant() && playerHasPriority)
+			{
+				if (randomisePlayerCue)
+				{
+					_selectedCueIndex = ChooseRandomPlayerCue(new HashSet<int>());
+				}
+
+				_participantCueIndices[0] = _selectedCueIndex;
+			}
+
+			foreach (AvatarHudEntry entry in entries)
+			{
+				if (entry.Npc == null)
+				{
+					continue;
+				}
+
+				int cueIndex = ChooseNpcCue(entry.Npc.Name, _participantCueIndices.Values.ToHashSet());
+				_participantCueIndices[entry.PlayerIndex] = cueIndex;
+			}
+
+			if (HasHumanParticipant())
+			{
+				if (randomisePlayerCue && !playerHasPriority)
+				{
+					_selectedCueIndex = ChooseRandomPlayerCue(GetNpcCueIndices());
+				}
+				else if (IsCueOccupiedByNpc(_selectedCueIndex))
+				{
+					_selectedCueIndex = FindNextAvailablePlayerCue(_selectedCueIndex, 1);
+				}
+
+				_participantCueIndices[0] = _selectedCueIndex;
+			}
+		}
+
+		private bool HasHumanParticipant()
+		{
+			return string.IsNullOrWhiteSpace(_npcPlayerName);
+		}
+
+		private int ChooseNpcCue(string npcName, HashSet<int> occupiedCues)
+		{
+			int favourite = GetNpcFavouriteCueIndex(npcName);
+			if (IsCueIndexValid(favourite) && !occupiedCues.Contains(favourite))
+			{
+				return favourite;
+			}
+
+			List<int> available = GetAvailableCueIndices(occupiedCues);
+			return available.Count > 0 ? available[_cueRandom.Next(available.Count)] : MathHelper.Clamp(favourite, 0, CueSources.Length - 1);
+		}
+
+		private int GetNpcFavouriteCueIndex(string npcName)
+		{
+			return _profiles.Npcs.TryGetValue(npcName, out PoolNpcProfile? profile) ? profile.FavouriteCueIndex : 0;
+		}
+
+		private static bool IsCueIndexValid(int cueIndex)
+		{
+			return cueIndex >= 0 && cueIndex < CueSources.Length;
+		}
+
+		private List<int> GetAvailableCueIndices(HashSet<int> occupiedCues)
+		{
+			List<int> available = new();
+			for (int i = 0; i < CueSources.Length; i++)
+			{
+				if (!occupiedCues.Contains(i))
+				{
+					available.Add(i);
+				}
+			}
+
+			return available;
+		}
+
+		private int ChooseRandomPlayerCue(HashSet<int> occupiedCues)
+		{
+			List<int> available = GetAvailableCueIndices(occupiedCues);
+			return available.Count > 0 ? available[_cueRandom.Next(available.Count)] : _selectedCueIndex;
+		}
+
+		private HashSet<int> GetNpcCueIndices()
+		{
+			HashSet<int> cueIndices = new();
+			foreach ((int playerIndex, int cueIndex) in _participantCueIndices)
+			{
+				if (playerIndex != 0 || !HasHumanParticipant())
+				{
+					cueIndices.Add(cueIndex);
+				}
+			}
+
+			return cueIndices;
+		}
+
+		private bool IsCueOccupiedByNpc(int cueIndex)
+		{
+			foreach ((int playerIndex, int npcCueIndex) in _participantCueIndices)
+			{
+				if (playerIndex != 0 || !HasHumanParticipant())
+				{
+					if (npcCueIndex == cueIndex)
+					{
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
+		private int FindNextAvailablePlayerCue(int startIndex, int direction)
+		{
+			for (int i = 1; i <= CueSources.Length; i++)
+			{
+				int index = (startIndex + direction * i + CueSources.Length) % CueSources.Length;
+				if (!IsCueOccupiedByNpc(index))
+				{
+					return index;
+				}
+			}
+
+			return startIndex;
+		}
+
+		private int GetCueIndexForActivePlayer()
+		{
+			return _participantCueIndices.TryGetValue(_activePlayerIndex, out int cueIndex) ? cueIndex : _selectedCueIndex;
 		}
 
 		private static float EaseOutBack(float progress)
@@ -475,13 +656,130 @@ namespace StardropPoolMinigameRev.Scenes
 			cue.Play();
 		}
 
+		private void UpdateNpcTurn(GameTime time)
+		{
+			if (!IsNpcTurn() || AreBallsMoving() || _isAiming || _isCueStriking || _showCueAfterStrike || _isWaitingForShotToSettle)
+			{
+				_npcThinkMilliseconds = 0;
+				_isNpcShotQueued = false;
+				return;
+			}
+
+			if (!_isNpcShotQueued)
+			{
+				_isNpcShotQueued = true;
+				_npcThinkMilliseconds = NpcShotThinkMilliseconds;
+			}
+
+			_npcThinkMilliseconds -= time.ElapsedGameTime.TotalMilliseconds;
+			if (_npcThinkMilliseconds > 0)
+			{
+				return;
+			}
+
+			_isNpcShotQueued = false;
+			TakeNpcShot();
+		}
+
+		private bool IsNpcTurn()
+		{
+			return !IsHumanTurn() && GetAvatarHudEntries().Count > 1;
+		}
+
+		private bool IsHumanTurn()
+		{
+			return string.IsNullOrWhiteSpace(_npcPlayerName) && _activePlayerIndex == 0;
+		}
+
+		private void TakeNpcShot()
+		{
+			PoolBall? cueBall = GetCueBall();
+			if (cueBall == null)
+			{
+				AdvanceTurn();
+				return;
+			}
+
+			NpcShotCandidate shot = FindBestNpcShot();
+			_strikeDirection = shot.Direction;
+			_strikeCueBallPosition = cueBall.Position;
+			_strikePowerRatio = shot.PowerRatio;
+			_strikeDurationMilliseconds = MathHelper.Lerp(CueStrikeMaximumMilliseconds, CueStrikeMinimumMilliseconds, _strikePowerRatio);
+			_strikeMilliseconds = 0;
+			_hasCueStruckBall = false;
+			_currentShotScored = false;
+			_activeShotPower = ShotPower;
+			_isCueStriking = true;
+		}
+
+		private IEnumerable<PoolBall> GetNpcTargetBalls()
+		{
+			int npcBallType = GetAssignedBallTypeForPlayer(_activePlayerIndex);
+			IEnumerable<PoolBall> candidates = _balls.Where(ball => !ball.IsCueBall && !ball.IsPocketed);
+			if (npcBallType != 0)
+			{
+				var groupBalls = candidates.Where(ball => GetBallType(ball) == npcBallType).ToList();
+				if (groupBalls.Count > 0)
+				{
+					return groupBalls;
+				}
+
+				return candidates.Where(ball => ball.Number == 8);
+			}
+
+			return candidates.Where(ball => ball.Number != 8);
+		}
+
+		private void AssignBallTypeIfNeeded(PoolBall ball)
+		{
+			if (_playerAssignedBallType != 0 || ball.Number == 8)
+			{
+				return;
+			}
+
+			int pocketedType = GetBallType(ball);
+			if (pocketedType == 0)
+			{
+				return;
+			}
+
+			_playerAssignedBallType = _activePlayerIndex == 0 ? pocketedType : -pocketedType;
+		}
+
+		private int GetAssignedBallTypeForPlayer(int playerIndex)
+		{
+			if (_playerAssignedBallType == 0)
+			{
+				return 0;
+			}
+
+			return playerIndex == 0 ? _playerAssignedBallType : -_playerAssignedBallType;
+		}
+
+		private static int GetBallType(PoolBall ball)
+		{
+			if (ball.Number is >= 1 and <= 7)
+			{
+				return 1;
+			}
+
+			if (ball.Number is >= 9 and <= 15)
+			{
+				return -1;
+			}
+
+			return 0;
+		}
+
 		private void AdvanceTurn()
 		{
 			int playerCount = GetAvatarHudEntries().Count;
-			if (playerCount > 1)
+			if (playerCount > 1 && !_currentShotScored)
 			{
 				_activePlayerIndex = (_activePlayerIndex + 1) % playerCount;
 			}
+
+			_currentShotScored = false;
 		}
 	}
 }

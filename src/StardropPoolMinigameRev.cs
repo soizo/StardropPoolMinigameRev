@@ -24,6 +24,8 @@ namespace StardropPoolMinigameRev
         private readonly ITranslationHelper _i18n;
         private readonly bool _isSveInstalled;
         private readonly string? _npcOpponentName;
+        private readonly string? _npcPlayerName;
+        private readonly PoolNpcProfiles _profiles;
         private PoolTableSnapshot? _currentSnapshot;
         private readonly string? _previousMusicTrack;
         private readonly bool _previousMouseVisible;
@@ -34,12 +36,14 @@ namespace StardropPoolMinigameRev
         private Vector2 _lastRawLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
         private Vector2 _capturedLogicalMouse = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
 
-        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot, string? npcOpponentName = null)
+        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null)
         {
             _monitor = monitor;
             _saveSnapshot = saveSnapshot;
             _i18n = helper.Translation;
             _npcOpponentName = npcOpponentName;
+            _npcPlayerName = npcPlayerName;
+            _profiles = profiles ?? new PoolNpcProfiles();
             _currentSnapshot = snapshot;
             _isSveInstalled = helper.ModRegistry.IsLoaded("FlashShifter.StardewValleyExpandedCP")
                 || helper.ModRegistry.IsLoaded("FlashShifter.SVECode");
@@ -53,7 +57,7 @@ namespace StardropPoolMinigameRev
             _assets = new StardropPoolAssets(helper, _monitor);
             _assets.Load();
 
-            _scene = new GameScene(_monitor, snapshot, _isSveInstalled, _npcOpponentName);
+            _scene = new GameScene(_monitor, snapshot, _isSveInstalled, _npcOpponentName, _npcPlayerName, _profiles);
             _previousMusicTrack = Game1.currentSong?.Name;
             Game1.changeMusicTrack("movieTheater");
 
@@ -80,7 +84,7 @@ namespace StardropPoolMinigameRev
             {
                 case SceneId.Game:
                     _monitor.Log("Transitioning to game scene.", LogLevel.Info);
-                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled, _npcOpponentName);
+                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled, _npcOpponentName, _npcPlayerName, _profiles);
                     break;
                 case SceneId.MainMenu:
                     _monitor.Log("Transitioning to main menu.", LogLevel.Info);

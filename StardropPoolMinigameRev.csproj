@@ -22,6 +22,9 @@
     <None Update="i18n\default.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="profile.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="[CP] StardropPoolMinigameRev\Assets\Tilesheets\stardropPool.png" Link="Assets\Tilesheets\stardropPool.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -24,7 +24,7 @@ namespace StardropPoolMinigameRev.Scenes
 				{
 					int ballIndex = RackBallOrder[index];
 					Vector2 centre = new(rowCentreX, startY + slot * RackStepY);
-					_balls.Add(new PoolBall(RackBallSources[ballIndex], centre, isCueBall: false, isStriped: ballIndex >= 8, isHighlighted: false));
+					_balls.Add(new PoolBall(RackBallSources[ballIndex], centre, isCueBall: false, isStriped: ballIndex >= 8, isHighlighted: false, number: ballIndex + 1));
 					index++;
 				}
 			}
@@ -48,6 +48,7 @@ namespace StardropPoolMinigameRev.Scenes
 			_shots = snapshot.Shots;
 			_pocketed = snapshot.Pocketed;
 			_activePlayerIndex = MathHelper.Clamp(snapshot.ActivePlayerIndex, 0, GetAvatarHudEntries().Count - 1);
+			_playerAssignedBallType = MathHelper.Clamp(snapshot.PlayerAssignedBallType, -1, 1);
 			_pocketedBallEntries.Clear();
 			for (int i = 0; i < snapshot.Balls.Count; i++)
 			{
@@ -164,7 +165,9 @@ namespace StardropPoolMinigameRev.Scenes
 				return;
 			}
 
-			cueBall.Velocity = _strikeDirection * _strikePowerRatio * MaxPullDistance * ShotPower;
+			cueBall.Velocity = _strikeDirection * _strikePowerRatio * MaxPullDistance * _activeShotPower;
+			_activeShotPower = ShotPower;
+			_currentShotScored = false;
 			_isWaitingForShotToSettle = true;
 			_shots++;
 			Game1.playSound("thudStep");
@@ -309,6 +312,8 @@ namespace StardropPoolMinigameRev.Scenes
 					int ballIndex = _balls.IndexOf(ball);
 					if (ballIndex > 0)
 					{
+						AssignBallTypeIfNeeded(ball);
+						_currentShotScored = true;
 						_pocketedBallEntries.Add(new PocketedBallEntry(ballIndex, _activePlayerIndex)
 						{
 							Orientation = ball.Orientation,

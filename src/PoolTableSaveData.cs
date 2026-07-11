@@ -6,6 +6,8 @@ namespace StardropPoolMinigameRev
 
         public int CurrentTableDay { get; set; }
 
+        public string? CurrentTableOpponentName { get; set; }
+
         public List<string> NpcsAtTable { get; set; } = new();
     }
 
@@ -18,6 +20,8 @@ namespace StardropPoolMinigameRev
         public int Pocketed { get; set; }
 
         public int ActivePlayerIndex { get; set; }
+
+        public int PlayerAssignedBallType { get; set; }
 
         public List<PoolPocketedBallSnapshot> PocketedBalls { get; set; } = new();
     }

@@ -1,0 +1,16 @@
+{
+  "npcs": {
+    "Sam": {
+      "favouriteCueIndex": 1
+    },
+    "Sebastian": {
+      "favouriteCueIndex": 2
+    },
+    "Abigail": {
+      "favouriteCueIndex": 3
+    },
+    "Gus": {
+      "favouriteCueIndex": 4
+    }
+  }
+}

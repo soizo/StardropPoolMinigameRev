@@ -30,13 +30,14 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private sealed class PoolBall
 		{
-			public PoolBall(Rectangle source, Vector2 position, bool isCueBall, bool isStriped, bool isHighlighted)
+			public PoolBall(Rectangle source, Vector2 position, bool isCueBall, bool isStriped, bool isHighlighted, int number = 0)
 			{
 				Source = source;
 				Position = position;
 				IsCueBall = isCueBall;
 				IsStriped = isStriped;
 				IsHighlighted = isHighlighted;
+				Number = number;
 			}
 
 			public Rectangle Source { get; }
@@ -50,6 +51,8 @@ namespace StardropPoolMinigameRev.Scenes
 			public bool IsStriped { get; }
 
 			public bool IsHighlighted { get; }
+
+			public int Number { get; }
 
 			public Vector2 Orientation { get; set; }
 

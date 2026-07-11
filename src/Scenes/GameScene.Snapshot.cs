@@ -10,7 +10,8 @@ namespace StardropPoolMinigameRev.Scenes
 			{
 				Shots = _shots,
 				Pocketed = _pocketed,
-				ActivePlayerIndex = _activePlayerIndex
+				ActivePlayerIndex = _activePlayerIndex,
+				PlayerAssignedBallType = _playerAssignedBallType
 			};
 
 			for (int i = 0; i < _balls.Count; i++)

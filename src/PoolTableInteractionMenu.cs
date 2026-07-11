@@ -6,7 +6,7 @@ namespace StardropPoolMinigameRev
 {
     internal enum InteractionType { Solo, Watch, PlayAgainst, Leave }
 
-    internal sealed record InteractionDecision(InteractionType Type, string? NpcName);
+    internal sealed record InteractionDecision(InteractionType Type, string? NpcName, string? OtherNpcName = null);
 
     internal static class PoolTableInteractionMenu
     {
@@ -90,7 +90,7 @@ namespace StardropPoolMinigameRev
                 PoolTableInteractionMode.AlwaysSolo => new InteractionDecision(InteractionType.Solo, null),
                 PoolTableInteractionMode.AlwaysVsNpc => TryGetRandomNpcDecision(npcsAtTable, eligibleInSaloon),
                 PoolTableInteractionMode.AlwaysWatch => npcsAtTable.Count >= 2
-                    ? new InteractionDecision(InteractionType.Watch, null)
+                    ? new InteractionDecision(InteractionType.Watch, npcsAtTable[0], npcsAtTable[1])
                     : null,
                 _ => null
             };
@@ -175,7 +175,9 @@ namespace StardropPoolMinigameRev
 
             if (answerKey == ResponseWatch)
             {
-                return new InteractionDecision(InteractionType.Watch, null);
+                return npcsAtTable.Count >= 2
+                    ? new InteractionDecision(InteractionType.Watch, npcsAtTable[0], npcsAtTable[1])
+                    : null;
             }
 
             if (answerKey == ResponseLeave)

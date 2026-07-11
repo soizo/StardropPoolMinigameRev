@@ -166,7 +166,15 @@ namespace StardropPoolMinigameRev.Scenes
 		private List<AvatarHudEntry> GetAvatarHudEntries()
 		{
 			List<AvatarHudEntry> entries = new();
-			entries.Add(new AvatarHudEntry(0, Game1.player, null));
+			if (!string.IsNullOrWhiteSpace(_npcPlayerName))
+			{
+				NPC? firstNpc = Game1.getCharacterFromName(_npcPlayerName, mustBeVillager: true);
+				entries.Add(new AvatarHudEntry(0, null, firstNpc));
+			}
+			else
+			{
+				entries.Add(new AvatarHudEntry(0, Game1.player, null));
+			}
 
 			if (!string.IsNullOrWhiteSpace(_npcOpponentName))
 			{
@@ -468,17 +476,29 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private Rectangle GetSelectedCueSource()
 		{
-			return CueSources[_selectedCueIndex];
+			return CueSources[GetCueIndexForActivePlayer()];
 		}
 
 		private void SelectPreviousCue()
 		{
-			_selectedCueIndex = (_selectedCueIndex + CueSources.Length - 1) % CueSources.Length;
+			if (!HasHumanParticipant())
+			{
+				return;
+			}
+
+			_selectedCueIndex = FindNextAvailablePlayerCue(_selectedCueIndex, -1);
+			ResolveParticipantCues(playerHasPriority: true);
 		}
 
 		private void SelectNextCue()
 		{
-			_selectedCueIndex = (_selectedCueIndex + 1) % CueSources.Length;
+			if (!HasHumanParticipant())
+			{
+				return;
+			}
+
+			_selectedCueIndex = FindNextAvailablePlayerCue(_selectedCueIndex, 1);
+			ResolveParticipantCues(playerHasPriority: true);
 		}
 
 		private void ReturnToMainMenu()

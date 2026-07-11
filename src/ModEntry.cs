@@ -1,12 +1,16 @@
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using System.Text.Json;
 
 namespace StardropPoolMinigameRev
 {
     public sealed class ModEntry : Mod
     {
         private const string SaveDataKey = "pool-table-state";
+        private const string ProfileFileName = "profile.json";
+        private static readonly string[] ProfileNpcNames = { "Sam", "Sebastian", "Abigail", "Gus" };
+        private static readonly JsonSerializerOptions ProfileJsonOptions = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
         private static readonly string[] InteractionModeValues =
         {
             nameof(PoolTableInteractionMode.Default),
@@ -17,10 +21,12 @@ namespace StardropPoolMinigameRev
 
         private PoolTableSaveData _saveData = new();
         private ModConfig _config = new();
+        private PoolNpcProfiles _profiles = new();
 
         public override void Entry(IModHelper helper)
         {
             _config = helper.ReadConfig<ModConfig>();
+            _profiles = LoadProfiles();
 
             helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             helper.Events.GameLoop.DayStarted += OnDayStarted;
@@ -111,6 +117,7 @@ namespace StardropPoolMinigameRev
                 Monitor.Log("Resetting saved pool table state for the new day.", LogLevel.Info);
                 _saveData.CurrentTable = null;
                 _saveData.CurrentTableDay = 0;
+                _saveData.CurrentTableOpponentName = null;
             }
         }
 
@@ -122,6 +129,49 @@ namespace StardropPoolMinigameRev
         private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
         {
             RegisterGenericModConfigMenu();
+        }
+
+        private PoolNpcProfiles LoadProfiles()
+        {
+            string path = Path.Combine(Helper.DirectoryPath, ProfileFileName);
+            PoolNpcProfiles profiles = new();
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string json = File.ReadAllText(path);
+                    profiles = JsonSerializer.Deserialize<PoolNpcProfiles>(json, ProfileJsonOptions) ?? new PoolNpcProfiles();
+                }
+            }
+            catch (Exception ex)
+            {
+                Monitor.Log($"Failed to read {ProfileFileName}; using default NPC profiles. {ex.Message}", LogLevel.Warn);
+                profiles = new PoolNpcProfiles();
+            }
+
+            bool changed = false;
+            foreach (string npcName in ProfileNpcNames)
+            {
+                if (!profiles.Npcs.ContainsKey(npcName))
+                {
+                    profiles.Npcs[npcName] = new PoolNpcProfile { FavouriteCueIndex = 0 };
+                    changed = true;
+                }
+            }
+
+            if (!File.Exists(path) || changed)
+            {
+                try
+                {
+                    File.WriteAllText(path, JsonSerializer.Serialize(profiles, ProfileJsonOptions));
+                }
+                catch (Exception ex)
+                {
+                    Monitor.Log($"Failed to write {ProfileFileName}. {ex.Message}", LogLevel.Warn);
+                }
+            }
+
+            return profiles;
         }
 
         private void RegisterGenericModConfigMenu()
@@ -195,8 +245,8 @@ namespace StardropPoolMinigameRev
                     break;
 
                 case InteractionType.Watch:
-                    Monitor.Log("Watching NPCs play.", LogLevel.Info);
-                    StartGame(null);
+                    Monitor.Log($"Watching {decision.NpcName} play against {decision.OtherNpcName}.", LogLevel.Info);
+                    StartGame(decision.OtherNpcName, decision.NpcName);
                     break;
 
                 case InteractionType.Leave:
@@ -205,16 +255,36 @@ namespace StardropPoolMinigameRev
             }
         }
 
-        private void StartGame(string? npcOpponentName)
+        private void StartGame(string? npcOpponentName, string? npcPlayerName = null)
         {
             Monitor.Log("Starting Stardrop Pool minigame from pool table interaction.", LogLevel.Info);
-            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, _saveData.CurrentTable, SaveCurrentTable, npcOpponentName);
+            string? tableContext = GetTableContext(npcOpponentName, npcPlayerName);
+            PoolTableSnapshot? snapshot = IsCurrentTableCompatible(tableContext) ? _saveData.CurrentTable : null;
+            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, snapshot, snapshot => SaveCurrentTable(snapshot, tableContext), npcOpponentName, npcPlayerName, _profiles);
         }
 
-        private void SaveCurrentTable(PoolTableSnapshot snapshot)
+        private static string? GetTableContext(string? npcOpponentName, string? npcPlayerName)
+        {
+            return string.IsNullOrWhiteSpace(npcPlayerName)
+                ? npcOpponentName
+                : $"watch:{npcPlayerName}:{npcOpponentName}";
+        }
+
+        private bool IsCurrentTableCompatible(string? tableContext)
+        {
+            if (_saveData.CurrentTable == null)
+            {
+                return true;
+            }
+
+            return string.Equals(_saveData.CurrentTableOpponentName, tableContext, StringComparison.Ordinal);
+        }
+
+        private void SaveCurrentTable(PoolTableSnapshot snapshot, string? tableContext)
         {
             _saveData.CurrentTable = snapshot;
             _saveData.CurrentTableDay = GetCurrentDayId();
+            _saveData.CurrentTableOpponentName = tableContext;
         }
     }
 }
