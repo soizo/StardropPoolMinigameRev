@@ -9,7 +9,14 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private sealed record AvatarHudEntry(int PlayerIndex, Farmer? Farmer, NPC? Npc);
 
-		private sealed record PocketedBallEntry(int BallIndex, int OwnerIndex);
+		private sealed record PocketedBallEntry(int BallIndex, int OwnerIndex)
+		{
+			public Vector2 Orientation { get; init; }
+
+			public float VisualXOffset { get; set; }
+
+			public float VisualXVelocity { get; set; }
+		}
 
 		private enum RowElementType
 		{

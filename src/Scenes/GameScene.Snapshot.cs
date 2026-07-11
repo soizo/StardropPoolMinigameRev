@@ -34,7 +34,9 @@ namespace StardropPoolMinigameRev.Scenes
 				snapshot.PocketedBalls.Add(new PoolPocketedBallSnapshot
 				{
 					BallIndex = entry.BallIndex,
-					OwnerIndex = entry.OwnerIndex
+					OwnerIndex = entry.OwnerIndex,
+					OrientationX = entry.Orientation.X,
+					OrientationY = entry.Orientation.Y
 				});
 			}
 

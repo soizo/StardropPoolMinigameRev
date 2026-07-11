@@ -85,8 +85,12 @@ namespace StardropPoolMinigameRev.Scenes
 		private const int AvatarOutlineExtraHeight = 4;
 		private const byte AvatarOutlineAlphaThreshold = 8;
 		private static readonly Point AvatarOutlineTextureSize = new(AvatarSize.X + AvatarOutlinePadding * 2, AvatarSize.Y + AvatarOutlinePadding * 2 + AvatarOutlineExtraHeight);
-		private const int AvatarBallXOffset = 2;
-		private const int AvatarGroupGap = 4;
+		private const int AvatarBallXOffset = 8;
+		private const int AvatarBallGap = 4;
+		private const float AvatarBallVisualSpring = 0.25f;
+		private const float AvatarBallVisualDamping = 0.68f;
+		private const float AvatarBallPocketPush = -3f;
+		private const int AvatarGroupGap = 2;
 		private const int AvatarCapsulePadding = 2;
 		private static readonly Color AvatarCapsuleColour = new(38, 20, 31);
 		private static readonly Point SpaceSize = new(8, 16);
@@ -171,6 +175,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private int _pocketed;
 		private int _activePlayerIndex;
 		private double _scratchMessageMilliseconds;
+		private int _lastPocketedEntryCount;
 
 		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot, bool isSveInstalled, string? npcOpponentName = null)
 		{
@@ -200,6 +205,7 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 
 			UpdateRowElementScales();
+			UpdatePocketedBallHudMotion();
 			if (_scratchMessageMilliseconds > 0)
 			{
 				_scratchMessageMilliseconds = Math.Max(0, _scratchMessageMilliseconds - time.ElapsedGameTime.TotalMilliseconds);

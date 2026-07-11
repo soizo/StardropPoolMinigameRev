@@ -138,21 +138,26 @@ namespace StardropPoolMinigameRev.Scenes
 			for (int i = entries.Count - 1; i >= 0; i--)
 			{
 				AvatarHudEntry entry = entries[i];
-				List<PoolBall> pocketedBalls = GetPocketedBallsForPlayer(entry.PlayerIndex);
+				List<PocketedBallEntry> pocketedBalls = GetPocketedBallEntriesForPlayer(entry.PlayerIndex);
 				int capsuleWidth = GetAvatarCapsuleWidth(pocketedBalls.Count);
 				Rectangle capsule = new(right - capsuleWidth, bounds.Y - AvatarCapsulePadding, capsuleWidth, bounds.Height + AvatarCapsulePadding * 2);
 				DrawPixelCapsule(batch, capsule, AvatarCapsuleColour);
 
+				Vector2 avatarPosition = new(capsule.X + AvatarCapsulePadding + 1, bounds.Y - 2);
+				int firstBallX = capsule.X + AvatarCapsulePadding + AvatarSize.X + AvatarBallGap + BallSize / 2;
 				for (int ballIndex = 0; ballIndex < pocketedBalls.Count; ballIndex++)
 				{
-					PoolBall ball = pocketedBalls[ballIndex];
+					PocketedBallEntry pocketedBall = pocketedBalls[ballIndex];
+					PoolBall ball = _balls[pocketedBall.BallIndex];
 					Vector2 originalPosition = ball.Position;
-					ball.Position = new Vector2(capsule.X + AvatarCapsulePadding + BallSize / 2 + ballIndex * AvatarBallXOffset, bounds.Center.Y);
+					Vector2 originalOrientation = ball.Orientation;
+					ball.Position = new Vector2(firstBallX + ballIndex * AvatarBallXOffset + pocketedBall.VisualXOffset, bounds.Center.Y);
+					ball.Orientation = pocketedBall.Orientation;
 					DrawBall(batch, assets, ball);
 					ball.Position = originalPosition;
+					ball.Orientation = originalOrientation;
 				}
 
-				Vector2 avatarPosition = new(capsule.Right - AvatarCapsulePadding - AvatarSize.X, bounds.Y);
 				DrawAvatarPortrait(batch, entry, avatarPosition, entry.PlayerIndex == _activePlayerIndex);
 				right = capsule.X - AvatarGroupGap;
 			}
@@ -172,23 +177,49 @@ namespace StardropPoolMinigameRev.Scenes
 			return entries;
 		}
 
-		private List<PoolBall> GetPocketedBallsForPlayer(int playerIndex)
+		private List<PocketedBallEntry> GetPocketedBallEntriesForPlayer(int playerIndex)
 		{
-			List<PoolBall> result = new();
+			List<PocketedBallEntry> result = new();
 			foreach (PocketedBallEntry entry in _pocketedBallEntries)
 			{
 				if (entry.OwnerIndex == playerIndex && entry.BallIndex > 0 && entry.BallIndex < _balls.Count)
 				{
-					result.Add(_balls[entry.BallIndex]);
+					result.Add(entry);
 				}
 			}
 
 			return result;
 		}
 
+		private void UpdatePocketedBallHudMotion()
+		{
+			if (_pocketedBallEntries.Count < _lastPocketedEntryCount)
+			{
+				_lastPocketedEntryCount = _pocketedBallEntries.Count;
+			}
+
+			for (int i = _lastPocketedEntryCount; i < _pocketedBallEntries.Count; i++)
+			{
+				_pocketedBallEntries[i].VisualXVelocity += AvatarBallPocketPush;
+			}
+
+			_lastPocketedEntryCount = _pocketedBallEntries.Count;
+			foreach (PocketedBallEntry entry in _pocketedBallEntries)
+			{
+				entry.VisualXVelocity += -entry.VisualXOffset * AvatarBallVisualSpring;
+				entry.VisualXVelocity *= AvatarBallVisualDamping;
+				entry.VisualXOffset += entry.VisualXVelocity;
+				if (Math.Abs(entry.VisualXOffset) < 0.05f && Math.Abs(entry.VisualXVelocity) < 0.05f)
+				{
+					entry.VisualXOffset = 0;
+					entry.VisualXVelocity = 0;
+				}
+			}
+		}
+
 		private static int GetAvatarCapsuleWidth(int pocketedBallCount)
 		{
-			int ballWidth = pocketedBallCount == 0 ? 0 : BallSize + Math.Max(0, pocketedBallCount - 1) * AvatarBallXOffset;
+			int ballWidth = pocketedBallCount == 0 ? 0 : AvatarBallGap + BallSize + Math.Max(0, pocketedBallCount - 1) * AvatarBallXOffset;
 			return AvatarCapsulePadding * 2 + AvatarSize.X + ballWidth;
 		}
 
@@ -201,7 +232,7 @@ namespace StardropPoolMinigameRev.Scenes
 			{
 				float dy = y + 0.5f - radius;
 				int inset = Math.Max(0, (int)MathF.Ceiling(radius - MathF.Sqrt(Math.Max(0, radius * radius - dy * dy))));
-				batch.Draw(Game1.staminaRect, new Rectangle(bounds.X + inset, bounds.Y + y, bounds.Width - inset * 2, 1), Game1.staminaRect.Bounds, colour);
+				batch.Draw(Game1.staminaRect, new Rectangle(bounds.X + inset, bounds.Y + y, Math.Min(bounds.Width - inset, bounds.Width - inset * 2 + 1), 1), Game1.staminaRect.Bounds, colour);
 			}
 		}
 

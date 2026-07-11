@@ -27,6 +27,10 @@ namespace StardropPoolMinigameRev
         public int BallIndex { get; set; }
 
         public int OwnerIndex { get; set; }
+
+        public float OrientationX { get; set; }
+
+        public float OrientationY { get; set; }
     }
 
     internal sealed class PoolBallSnapshot

@@ -49,13 +49,6 @@ namespace StardropPoolMinigameRev.Scenes
 			_pocketed = snapshot.Pocketed;
 			_activePlayerIndex = MathHelper.Clamp(snapshot.ActivePlayerIndex, 0, GetAvatarHudEntries().Count - 1);
 			_pocketedBallEntries.Clear();
-			foreach (PoolPocketedBallSnapshot pocketedBall in snapshot.PocketedBalls)
-			{
-				if (pocketedBall.BallIndex > 0 && pocketedBall.BallIndex < _balls.Count)
-				{
-					_pocketedBallEntries.Add(new PocketedBallEntry(pocketedBall.BallIndex, MathHelper.Clamp(pocketedBall.OwnerIndex, 0, GetAvatarHudEntries().Count - 1)));
-				}
-			}
 			for (int i = 0; i < snapshot.Balls.Count; i++)
 			{
 				PoolBallSnapshot ballSnapshot = snapshot.Balls[i];
@@ -64,6 +57,23 @@ namespace StardropPoolMinigameRev.Scenes
 				ball.Velocity = new Vector2(ballSnapshot.VelocityX, ballSnapshot.VelocityY);
 				ball.Orientation = new Vector2(ballSnapshot.OrientationX, ballSnapshot.OrientationY);
 				ball.IsPocketed = ballSnapshot.IsPocketed;
+			}
+
+			foreach (PoolPocketedBallSnapshot pocketedBall in snapshot.PocketedBalls)
+			{
+				if (pocketedBall.BallIndex > 0 && pocketedBall.BallIndex < _balls.Count)
+				{
+					Vector2 orientation = new(pocketedBall.OrientationX, pocketedBall.OrientationY);
+					if (orientation.LengthSquared() <= 0)
+					{
+						orientation = _balls[pocketedBall.BallIndex].Orientation;
+					}
+
+					_pocketedBallEntries.Add(new PocketedBallEntry(pocketedBall.BallIndex, MathHelper.Clamp(pocketedBall.OwnerIndex, 0, GetAvatarHudEntries().Count - 1))
+					{
+						Orientation = orientation
+					});
+				}
 			}
 
 			AdvanceUntilSettled();
@@ -299,7 +309,11 @@ namespace StardropPoolMinigameRev.Scenes
 					int ballIndex = _balls.IndexOf(ball);
 					if (ballIndex > 0)
 					{
-						_pocketedBallEntries.Add(new PocketedBallEntry(ballIndex, _activePlayerIndex));
+						_pocketedBallEntries.Add(new PocketedBallEntry(ballIndex, _activePlayerIndex)
+						{
+							Orientation = ball.Orientation,
+							VisualXVelocity = AvatarBallPocketPush
+						});
 					}
 					Game1.playSound("coin");
 				}

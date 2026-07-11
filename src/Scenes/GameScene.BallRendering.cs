@@ -8,9 +8,9 @@ namespace StardropPoolMinigameRev.Scenes
 {
 	internal sealed partial class GameScene
 	{
-		private static void DrawBall(SpriteBatch batch, StardropPoolAssets assets, PoolBall ball)
+		private static void DrawBall(SpriteBatch batch, StardropPoolAssets assets, PoolBall ball, bool drawShadow = true)
 		{
-			Rectangle destination = new((int)MathF.Round(ball.Position.X) - BallSize / 2, (int)MathF.Round(ball.Position.Y) - BallSize / 2, BallSize, BallSize);
+			Rectangle destination = GetBallDestination(ball);
 			batch.Draw(assets.Tilesheet, destination, ball.Source, Color.White);
 
 			if (!ball.IsCueBall)
@@ -22,11 +22,24 @@ namespace StardropPoolMinigameRev.Scenes
 				}
 			}
 
-			batch.Draw(assets.Tilesheet, destination, SpriteRects.Ball.Shadow, Color.White);
+			if (drawShadow)
+			{
+				DrawBallShadow(batch, assets, ball);
+			}
 			if (ball.IsHighlighted)
 			{
 				batch.Draw(assets.Tilesheet, destination, SpriteRects.Ball.Highlight, Color.White);
 			}
+		}
+
+		private static Rectangle GetBallDestination(PoolBall ball)
+		{
+			return new Rectangle((int)MathF.Round(ball.Position.X) - BallSize / 2, (int)MathF.Round(ball.Position.Y) - BallSize / 2, BallSize, BallSize);
+		}
+
+		private static void DrawBallShadow(SpriteBatch batch, StardropPoolAssets assets, PoolBall ball)
+		{
+			batch.Draw(assets.Tilesheet, GetBallDestination(ball), SpriteRects.Ball.Shadow, Color.White);
 		}
 
 		private static Rectangle GetBallCoreSource(Vector2 face)
