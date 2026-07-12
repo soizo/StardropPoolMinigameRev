@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using StardropPoolMinigameRev;
 
 namespace StardropPoolMinigameRev.Scenes
 {
@@ -25,7 +26,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float NpcAiMinimumPowerRatio = 0.24f;
 		private const float NpcAiMaximumPowerRatio = 0.95f;
 
-		private readonly Random _npcAiRandom = new();
+		private readonly Random _npcAiRandom;
 
 		private sealed record NpcShotCandidate(float X, float Y, float Fitness)
 		{

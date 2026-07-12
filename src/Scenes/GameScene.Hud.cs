@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using StardewValley;
+using StardropPoolMinigameRev;
 using StardropPoolMinigameRev.Assets;
 using StardropPoolMinigameRev.Constants;
 
@@ -159,6 +160,7 @@ namespace StardropPoolMinigameRev.Scenes
 				}
 
 				DrawAvatarPortrait(batch, entry, avatarPosition, entry.PlayerIndex == _activePlayerIndex);
+				DrawEmoteBubble(batch, assets, entry.PlayerIndex, avatarPosition);
 				right = capsule.X - AvatarGroupGap;
 			}
 		}
@@ -385,6 +387,53 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 		}
 
+		private void DrawEmoteBubble(SpriteBatch batch, StardropPoolAssets assets, int playerIndex, Vector2 avatarPosition)
+		{
+			if (!_activeEmotes.TryGetValue(playerIndex, out ActiveEmoteBubble? bubble))
+			{
+				return;
+			}
+
+			Rectangle source = GetEmoteBubbleSource(bubble);
+			Rectangle destination = new((int)MathF.Round(avatarPosition.X), (int)MathF.Round(avatarPosition.Y + AvatarSize.Y + 2), SpriteRects.Emote.FrameSize, SpriteRects.Emote.FrameSize);
+			batch.Draw(assets.UpsideDownEmotes, destination, source, Color.White);
+		}
+
+		private Rectangle GetEmoteBubbleSource(ActiveEmoteBubble bubble)
+		{
+			double elapsed = EmoteBubbleMilliseconds - bubble.Milliseconds;
+			int frame = Math.Clamp((int)(elapsed / EmoteFrameMilliseconds), 0, SpriteRects.Emote.FramesPerRow - 1);
+			double closingStart = EmoteBubbleMilliseconds - EmoteFrameMilliseconds * SpriteRects.Emote.FramesPerRow;
+			if (elapsed < EmoteFrameMilliseconds * SpriteRects.Emote.FramesPerRow)
+			{
+				return SpriteRects.Emote.GetFrame(PoolNpcEmotes.DisabledIndex, frame);
+			}
+
+			if (elapsed >= closingStart)
+			{
+				int closingFrame = SpriteRects.Emote.FramesPerRow - 1 - Math.Clamp((int)((elapsed - closingStart) / EmoteFrameMilliseconds), 0, SpriteRects.Emote.FramesPerRow - 1);
+				return SpriteRects.Emote.GetFrame(PoolNpcEmotes.DisabledIndex, closingFrame);
+			}
+
+			int contentFrame = Math.Clamp((int)((elapsed - EmoteFrameMilliseconds * SpriteRects.Emote.FramesPerRow) / EmoteFrameMilliseconds), 0, SpriteRects.Emote.FramesPerRow - 1);
+			return SpriteRects.Emote.GetFrame(GetDisplayEmoteRow(bubble.EmoteIndex), contentFrame);
+		}
+
+		private int GetDisplayEmoteRow(int emoteIndex)
+		{
+			if (emoteIndex != SpriteRects.Emote.DefaultEyeRowIndex)
+			{
+				return emoteIndex;
+			}
+
+			return _config.EmoteEightAppearance switch
+			{
+				EmoteEightAppearance.BigEyes => SpriteRects.Emote.BigEyeRowIndex,
+				EmoteEightAppearance.SmallEyes => SpriteRects.Emote.SmallEyeRowIndex,
+				_ => SpriteRects.Emote.DefaultEyeRowIndex
+			};
+		}
+
 		private static Rectangle GetNpcAvatarSource(NPC npc)
 		{
 			Rectangle mugShot = npc.getMugShotSourceRect();
@@ -413,6 +462,11 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private Color GetRowElementTint(RowElement rowElement)
 		{
+			if (rowElement.Id == RowResetId && IsWatchMode())
+			{
+				return Color.White * 0.45f;
+			}
+
 			if (rowElement.Type == RowElementType.Button && _isGaldoraTheme)
 			{
 				return new Color(255, 244, 214);
@@ -432,8 +486,13 @@ namespace StardropPoolMinigameRev.Scenes
 			return _rowElementScales.TryGetValue(index, out float scale) ? scale : 1f;
 		}
 
-		private static float GetTargetRowElementScale(RowElement rowElement, bool isHovered, bool isPressed)
+		private float GetTargetRowElementScale(RowElement rowElement, bool isHovered, bool isPressed)
 		{
+			if (rowElement.Id == RowResetId && IsWatchMode())
+			{
+				return 1f;
+			}
+
 			return rowElement.Type switch
 			{
 				RowElementType.Button when isHovered => 1f + ButtonHoverExpansion / rowElement.Size.X,
@@ -463,6 +522,12 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private void ActivateRowElement(RowElement rowElement)
 		{
+			if (rowElement.Id == RowResetId && IsWatchMode())
+			{
+				PlaySceneSound("cancel");
+				return;
+			}
+
 			rowElement.OnActivate?.Invoke();
 			if (rowElement.Type == RowElementType.Button)
 			{
@@ -471,6 +536,20 @@ namespace StardropPoolMinigameRev.Scenes
 			else if (rowElement.Type == RowElementType.Arrow)
 			{
 				Game1.playSound("shwip");
+			}
+		}
+
+		private void DrawEmoteMenu(SpriteBatch batch, StardropPoolAssets assets)
+		{
+			if (!_isEmoteMenuOpen)
+			{
+				return;
+			}
+
+			foreach (EmoteMenuButton button in _emoteMenuButtons)
+			{
+				Rectangle source = SpriteRects.Emote.GetMenuFrame(GetDisplayEmoteRow(button.EmoteIndex));
+				batch.Draw(assets.UpsideDownEmotes, button.DrawBounds, source, Color.White);
 			}
 		}
 
@@ -488,6 +567,7 @@ namespace StardropPoolMinigameRev.Scenes
 
 			_selectedCueIndex = FindNextAvailablePlayerCue(_selectedCueIndex, -1);
 			ResolveParticipantCues(playerHasPriority: true);
+			_savePlayerCueIndex?.Invoke(_selectedCueIndex);
 		}
 
 		private void SelectNextCue()
@@ -499,11 +579,12 @@ namespace StardropPoolMinigameRev.Scenes
 
 			_selectedCueIndex = FindNextAvailablePlayerCue(_selectedCueIndex, 1);
 			ResolveParticipantCues(playerHasPriority: true);
+			_savePlayerCueIndex?.Invoke(_selectedCueIndex);
 		}
 
 		private void ReturnToMainMenu()
 		{
-			PendingTransition = SceneId.MainMenu;
+			PendingTransition = SceneId.Quit;
 		}
 	}
 }

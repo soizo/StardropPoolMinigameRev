@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using StardewModdingAPI;
 using StardewValley;
+using StardewValley.Menus;
 using StardewValley.Minigames;
 using StardropPoolMinigameRev.Assets;
 using StardropPoolMinigameRev.Constants;
@@ -21,11 +22,14 @@ namespace StardropPoolMinigameRev
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
         private readonly Action<PoolTableSnapshot> _saveSnapshot;
-        private readonly ITranslationHelper _i18n;
+        private readonly Action<int> _savePlayerCueIndex;
+        private readonly int _lastPlayerCueIndex;
         private readonly bool _isSveInstalled;
         private readonly string? _npcOpponentName;
         private readonly string? _npcPlayerName;
         private readonly PoolNpcProfiles _profiles;
+        private readonly ModConfig _config;
+        private readonly int? _randomSeedDay;
         private PoolTableSnapshot? _currentSnapshot;
         private readonly string? _previousMusicTrack;
         private readonly bool _previousMouseVisible;
@@ -36,14 +40,17 @@ namespace StardropPoolMinigameRev
         private Vector2 _lastRawLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
         private Vector2 _capturedLogicalMouse = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
 
-        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null)
+        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot, Action<int> savePlayerCueIndex, int lastPlayerCueIndex, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null, ModConfig? config = null, int? randomSeedDay = null)
         {
             _monitor = monitor;
             _saveSnapshot = saveSnapshot;
-            _i18n = helper.Translation;
+            _savePlayerCueIndex = savePlayerCueIndex;
+            _lastPlayerCueIndex = lastPlayerCueIndex;
             _npcOpponentName = npcOpponentName;
             _npcPlayerName = npcPlayerName;
             _profiles = profiles ?? new PoolNpcProfiles();
+            _config = config ?? new ModConfig();
+            _randomSeedDay = randomSeedDay;
             _currentSnapshot = snapshot;
             _isSveInstalled = helper.ModRegistry.IsLoaded("FlashShifter.StardewValleyExpandedCP")
                 || helper.ModRegistry.IsLoaded("FlashShifter.SVECode");
@@ -57,7 +64,7 @@ namespace StardropPoolMinigameRev
             _assets = new StardropPoolAssets(helper, _monitor);
             _assets.Load();
 
-            _scene = new GameScene(_monitor, snapshot, _isSveInstalled, _npcOpponentName, _npcPlayerName, _profiles);
+            _scene = new GameScene(_monitor, snapshot, _isSveInstalled, _npcOpponentName, _npcPlayerName, _profiles, _config, settleSnapshot: !IsWatchMode(), randomSeedDay: _randomSeedDay, lastPlayerCueIndex: _lastPlayerCueIndex, savePlayerCueIndex: _savePlayerCueIndex);
             _previousMusicTrack = Game1.currentSong?.Name;
             Game1.changeMusicTrack("movieTheater");
 
@@ -68,6 +75,7 @@ namespace StardropPoolMinigameRev
         {
             _viewport.Update();
             UpdateCapturedMouse();
+            UpdateActiveMenu(time);
             _scene.Update(time);
 
             if (_scene.PendingTransition != SceneId.None)
@@ -78,18 +86,18 @@ namespace StardropPoolMinigameRev
             return false;
         }
 
+        private bool IsWatchMode()
+        {
+            return !string.IsNullOrWhiteSpace(_npcPlayerName) && !string.IsNullOrWhiteSpace(_npcOpponentName);
+        }
+
         private void TransitionTo(SceneId target)
         {
             switch (target)
             {
                 case SceneId.Game:
                     _monitor.Log("Transitioning to game scene.", LogLevel.Info);
-                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled, _npcOpponentName, _npcPlayerName, _profiles);
-                    break;
-                case SceneId.MainMenu:
-                    _monitor.Log("Transitioning to main menu.", LogLevel.Info);
-                    PersistSceneState();
-                    _scene = new MainMenuScene(_monitor, _i18n);
+                    _scene = new GameScene(_monitor, _currentSnapshot, _isSveInstalled, _npcOpponentName, _npcPlayerName, _profiles, settleSnapshot: !IsWatchMode(), randomSeedDay: _randomSeedDay, lastPlayerCueIndex: _lastPlayerCueIndex, savePlayerCueIndex: _savePlayerCueIndex);
                     break;
                 case SceneId.Quit:
                     QuitMinigame();
@@ -136,6 +144,19 @@ namespace StardropPoolMinigameRev
 
         public void receiveLeftClick(int x, int y, bool playSound = true)
         {
+            if (TryDismissMatchEndDialogue())
+            {
+                return;
+            }
+
+            if (TryGetActiveMenu(out IClickableMenu? menu) && menu != null)
+            {
+                _monitor.Log($"[DEBUG-endmenu] Forwarding left click ({x}, {y}) to {menu.GetType().FullName}.", LogLevel.Trace);
+                menu.receiveLeftClick(x, y, playSound);
+                _monitor.Log($"[DEBUG-endmenu] After left click activeMenu={Game1.activeClickableMenu?.GetType().FullName ?? "null"}.", LogLevel.Trace);
+                return;
+            }
+
             Vector2 logical = _viewport.RawToLogical(x, y);
             _monitor.Log($"Left click raw {{X:{x} Y:{y}}} -> logical {Format(logical)}.", LogLevel.Info);
 
@@ -147,6 +168,12 @@ namespace StardropPoolMinigameRev
 
         public void leftClickHeld(int x, int y)
         {
+            if (TryGetActiveMenu(out IClickableMenu? menu) && menu != null)
+            {
+                menu.leftClickHeld(x, y);
+                return;
+            }
+
             Vector2 logical = GetInputLogicalPosition(x, y);
 
             if (_viewport.ContainsLogical(logical))
@@ -157,6 +184,12 @@ namespace StardropPoolMinigameRev
 
         public void releaseLeftClick(int x, int y)
         {
+            if (TryGetActiveMenu(out IClickableMenu? menu) && menu != null)
+            {
+                menu.releaseLeftClick(x, y);
+                return;
+            }
+
             Vector2 logical = GetInputLogicalPosition(x, y);
 
             if (_viewport.ContainsLogical(logical))
@@ -167,6 +200,17 @@ namespace StardropPoolMinigameRev
 
         public void receiveRightClick(int x, int y, bool playSound = true)
         {
+            if (TryDismissMatchEndDialogue())
+            {
+                return;
+            }
+
+            if (TryGetActiveMenu(out IClickableMenu? menu) && menu != null)
+            {
+                menu.receiveRightClick(x, y, playSound);
+                return;
+            }
+
             Vector2 logical = _viewport.RawToLogical(x, y);
             _monitor.Log($"Right click raw {{X:{x} Y:{y}}} -> logical {Format(logical)}.", LogLevel.Info);
 
@@ -184,6 +228,19 @@ namespace StardropPoolMinigameRev
         {
             _monitor.Log($"Minigame key press: {key}.", LogLevel.Info);
 
+            if (TryDismissMatchEndDialogue())
+            {
+                return;
+            }
+
+            if (TryGetActiveMenu(out IClickableMenu? menu) && menu != null)
+            {
+                _monitor.Log($"[DEBUG-endmenu] Forwarding key {key} to {menu.GetType().FullName}.", LogLevel.Trace);
+                menu.receiveKeyPress(key);
+                _monitor.Log($"[DEBUG-endmenu] After key {key} activeMenu={Game1.activeClickableMenu?.GetType().FullName ?? "null"}.", LogLevel.Trace);
+                return;
+            }
+
             if (key == Keys.Escape)
             {
                 QuitMinigame();
@@ -195,6 +252,27 @@ namespace StardropPoolMinigameRev
 
         public void receiveKeyRelease(Keys key)
         {
+        }
+
+        private bool TryDismissMatchEndDialogue()
+        {
+            return _scene is GameScene gameScene && gameScene.TryDismissMatchEndDialogue();
+        }
+
+        private void UpdateActiveMenu(GameTime time)
+        {
+            if (TryGetActiveMenu(out IClickableMenu? menu) && menu != null)
+            {
+                MouseState mouse = Mouse.GetState();
+                menu.performHoverAction(mouse.X, mouse.Y);
+                menu.update(time);
+            }
+        }
+
+        private bool TryGetActiveMenu(out IClickableMenu? menu)
+        {
+            menu = Game1.activeClickableMenu;
+            return menu != null;
         }
 
         public bool overrideFreeMouseMovement()

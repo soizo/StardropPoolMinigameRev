@@ -8,6 +8,10 @@ namespace StardropPoolMinigameRev
 
         public string? CurrentTableOpponentName { get; set; }
 
+        public int CurrentTableTimeOfDay { get; set; }
+
+        public int LastPlayerCueIndex { get; set; } = -1;
+
         public List<string> NpcsAtTable { get; set; } = new();
     }
 

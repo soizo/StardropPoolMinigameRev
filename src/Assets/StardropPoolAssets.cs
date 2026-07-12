@@ -17,9 +17,12 @@ namespace StardropPoolMinigameRev.Assets
 
         public Texture2D Tilesheet { get; private set; } = null!;
 
+        public Texture2D UpsideDownEmotes { get; private set; } = null!;
+
         public void Load()
         {
             Tilesheet = LoadTexture("Minigames/stardropPool", "Assets/Tilesheets/stardropPool.png");
+            UpsideDownEmotes = _helper.ModContent.Load<Texture2D>("Assets/Tilesheets/upsidedown_emotes.png");
         }
 
         private Texture2D LoadTexture(string gameAssetName, string modAssetPath)

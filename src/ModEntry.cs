@@ -1,6 +1,7 @@
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardropPoolMinigameRev.Scenes;
 using System.Text.Json;
 
 namespace StardropPoolMinigameRev
@@ -17,6 +18,12 @@ namespace StardropPoolMinigameRev
             nameof(PoolTableInteractionMode.AlwaysSolo),
             nameof(PoolTableInteractionMode.AlwaysVsNpc),
             nameof(PoolTableInteractionMode.AlwaysWatch)
+        };
+        private static readonly string[] EmoteEightAppearanceValues =
+        {
+            nameof(EmoteEightAppearance.Default),
+            nameof(EmoteEightAppearance.BigEyes),
+            nameof(EmoteEightAppearance.SmallEyes)
         };
 
         private PoolTableSaveData _saveData = new();
@@ -45,7 +52,9 @@ namespace StardropPoolMinigameRev
         {
             if (Game1.currentMinigame is StardropPoolMinigameRev)
             {
-                if (IsShortcutButton(e.Button))
+                bool hasActiveMenu = Game1.activeClickableMenu != null;
+                Monitor.Log($"[DEBUG-endmenu] SMAPI pressed {e.Button}; activeMenu={Game1.activeClickableMenu?.GetType().FullName ?? "null"}; suppress={(!hasActiveMenu && IsShortcutButton(e.Button))}.", LogLevel.Trace);
+                if (!hasActiveMenu && IsShortcutButton(e.Button))
                 {
                     Helper.Input.Suppress(e.Button);
                 }
@@ -91,7 +100,7 @@ namespace StardropPoolMinigameRev
 
             foreach (SButton button in e.Pressed)
             {
-                if (IsShortcutButton(button))
+                if (Game1.activeClickableMenu == null && IsShortcutButton(button))
                 {
                     Helper.Input.Suppress(button);
                 }
@@ -118,6 +127,7 @@ namespace StardropPoolMinigameRev
                 _saveData.CurrentTable = null;
                 _saveData.CurrentTableDay = 0;
                 _saveData.CurrentTableOpponentName = null;
+                _saveData.CurrentTableTimeOfDay = 0;
             }
         }
 
@@ -155,6 +165,20 @@ namespace StardropPoolMinigameRev
                 if (!profiles.Npcs.ContainsKey(npcName))
                 {
                     profiles.Npcs[npcName] = new PoolNpcProfile { FavouriteCueIndex = 0 };
+                    changed = true;
+                }
+
+                if (profiles.Npcs[npcName].Emotes == null)
+                {
+                    profiles.Npcs[npcName].Emotes = new PoolNpcEmotes();
+                    changed = true;
+                }
+
+                PoolNpcEmotes emotes = profiles.Npcs[npcName].Emotes;
+                string beforeEmotes = JsonSerializer.Serialize(emotes, ProfileJsonOptions);
+                emotes.ClampContentIndices();
+                if (JsonSerializer.Serialize(emotes, ProfileJsonOptions) != beforeEmotes)
+                {
                     changed = true;
                 }
             }
@@ -204,6 +228,33 @@ namespace StardropPoolMinigameRev
                 allowedValues: InteractionModeValues,
                 formatAllowedValue: FormatInteractionMode
             );
+
+            gmcm.AddTextOption(
+                ModManifest,
+                getValue: () => _config.EmoteEightAppearance.ToString(),
+                setValue: value =>
+                {
+                    if (Enum.TryParse(value, out EmoteEightAppearance appearance))
+                    {
+                        _config.EmoteEightAppearance = appearance;
+                    }
+                },
+                name: () => Helper.Translation.Get("config.emote-eight-appearance.name").Default("Eye emote appearance"),
+                tooltip: () => Helper.Translation.Get("config.emote-eight-appearance.tooltip").Default("Choose which eye emote art is used when emote 8 is shown."),
+                allowedValues: EmoteEightAppearanceValues,
+                formatAllowedValue: FormatEmoteEightAppearance
+            );
+        }
+
+        private string FormatEmoteEightAppearance(string value)
+        {
+            return value switch
+            {
+                nameof(EmoteEightAppearance.Default) => Helper.Translation.Get("config.emote-eight-appearance.default").Default("Default"),
+                nameof(EmoteEightAppearance.BigEyes) => Helper.Translation.Get("config.emote-eight-appearance.big-eyes").Default("Big eyes"),
+                nameof(EmoteEightAppearance.SmallEyes) => Helper.Translation.Get("config.emote-eight-appearance.small-eyes").Default("Small eyes"),
+                _ => value
+            };
         }
 
         private string FormatInteractionMode(string value)
@@ -226,6 +277,7 @@ namespace StardropPoolMinigameRev
         private static bool IsShortcutButton(SButton button)
         {
             return button != SButton.Escape
+                && button != SButton.Y
                 && !button.IsUseToolButton()
                 && !button.IsActionButton();
         }
@@ -259,8 +311,71 @@ namespace StardropPoolMinigameRev
         {
             Monitor.Log("Starting Stardrop Pool minigame from pool table interaction.", LogLevel.Info);
             string? tableContext = GetTableContext(npcOpponentName, npcPlayerName);
-            PoolTableSnapshot? snapshot = IsCurrentTableCompatible(tableContext) ? _saveData.CurrentTable : null;
-            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, snapshot, snapshot => SaveCurrentTable(snapshot, tableContext), npcOpponentName, npcPlayerName, _profiles);
+            bool isWatchMode = IsWatchMode(npcOpponentName, npcPlayerName);
+            int? randomSeedDay = null;
+            PoolTableSnapshot? snapshot;
+            if (isWatchMode)
+            {
+                randomSeedDay = GetWatchSeedDay();
+                snapshot = BuildWatchSnapshotForCurrentTime(npcOpponentName, npcPlayerName, tableContext, randomSeedDay.Value);
+            }
+            else
+            {
+                snapshot = IsCurrentTableCompatible(tableContext) ? _saveData.CurrentTable : null;
+            }
+
+            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, snapshot, snapshot => SaveCurrentTable(snapshot, tableContext), SavePlayerCueIndex, _saveData.LastPlayerCueIndex, npcOpponentName, npcPlayerName, _profiles, _config, randomSeedDay);
+        }
+
+        private PoolTableSnapshot BuildWatchSnapshotForCurrentTime(string? npcOpponentName, string? npcPlayerName, string? tableContext, int randomSeedDay)
+        {
+            int watchStartMinutes = TimeOfDayToMinutes(1910);
+            bool startsAtWatchBoundary = TimeOfDayToMinutes(Game1.timeOfDay) == watchStartMinutes;
+            bool hasCompatibleSnapshot = !startsAtWatchBoundary && IsCurrentTableCompatible(tableContext) && _saveData.CurrentTable != null;
+            PoolTableSnapshot? snapshot = hasCompatibleSnapshot ? _saveData.CurrentTable : null;
+            int startTime = hasCompatibleSnapshot ? _saveData.CurrentTableTimeOfDay : 0;
+            int startMinutes = Math.Max(TimeOfDayToMinutes(startTime > 0 ? startTime : 1910), watchStartMinutes);
+            int targetMinutes = TimeOfDayToMinutes(Game1.timeOfDay);
+            if (targetMinutes < watchStartMinutes)
+            {
+                targetMinutes += 24 * 60;
+            }
+
+            double secondsToSimulate = Math.Max(0, targetMinutes - startMinutes);
+
+            GameScene scene = new(Monitor, snapshot, IsSveInstalled(), npcOpponentName, npcPlayerName, _profiles, _config, randomSeedDay: randomSeedDay);
+            scene.FastForwardWatch(secondsToSimulate);
+            PoolTableSnapshot result = scene.CreateSnapshot();
+            _saveData.CurrentTable = result;
+            _saveData.CurrentTableDay = GetCurrentDayId();
+            _saveData.CurrentTableOpponentName = tableContext;
+            _saveData.CurrentTableTimeOfDay = Game1.timeOfDay;
+            return result;
+        }
+
+        private bool IsSveInstalled()
+        {
+            return Helper.ModRegistry.IsLoaded("FlashShifter.StardewValleyExpandedCP")
+                || Helper.ModRegistry.IsLoaded("FlashShifter.SVECode");
+        }
+
+        private static bool IsWatchMode(string? npcOpponentName, string? npcPlayerName)
+        {
+            return !string.IsNullOrWhiteSpace(npcOpponentName) && !string.IsNullOrWhiteSpace(npcPlayerName);
+        }
+
+        private static int GetWatchSeedDay()
+        {
+            return TimeOfDayToMinutes(Game1.timeOfDay) < TimeOfDayToMinutes(1910)
+                ? Game1.Date.TotalDays - 1
+                : Game1.Date.TotalDays;
+        }
+
+        private static int TimeOfDayToMinutes(int timeOfDay)
+        {
+            int hours = timeOfDay / 100;
+            int minutes = timeOfDay % 100;
+            return hours * 60 + minutes;
         }
 
         private static string? GetTableContext(string? npcOpponentName, string? npcPlayerName)
@@ -285,6 +400,12 @@ namespace StardropPoolMinigameRev
             _saveData.CurrentTable = snapshot;
             _saveData.CurrentTableDay = GetCurrentDayId();
             _saveData.CurrentTableOpponentName = tableContext;
+            _saveData.CurrentTableTimeOfDay = Game1.timeOfDay;
+        }
+
+        private void SavePlayerCueIndex(int cueIndex)
+        {
+            _saveData.LastPlayerCueIndex = cueIndex;
         }
     }
 }

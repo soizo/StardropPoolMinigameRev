@@ -96,6 +96,26 @@ namespace StardropPoolMinigameRev.Constants
             public static readonly Microsoft.Xna.Framework.Rectangle RightArrow = new(365, 495, 12, 11);
         }
 
+        public static class Emote
+        {
+            public const int FrameSize = 16;
+            public const int FramesPerRow = 4;
+            public const int MenuFrameIndex = 4;
+            public const int DefaultEyeRowIndex = 8;
+            public const int BigEyeRowIndex = 16;
+            public const int SmallEyeRowIndex = 17;
+
+            public static Microsoft.Xna.Framework.Rectangle GetFrame(int rowIndex, int frameIndex)
+            {
+                return new Microsoft.Xna.Framework.Rectangle(frameIndex * FrameSize, rowIndex * FrameSize, FrameSize, FrameSize);
+            }
+
+            public static Microsoft.Xna.Framework.Rectangle GetMenuFrame(int rowIndex)
+            {
+                return GetFrame(rowIndex, MenuFrameIndex);
+            }
+        }
+
         public static class Ball
         {
             public static readonly Microsoft.Xna.Framework.Rectangle Highlight = new(368, 176, 16, 16);

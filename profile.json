@@ -1,16 +1,60 @@
 {
   "npcs": {
     "Sam": {
-      "favouriteCueIndex": 1
+      "favouriteCueIndex": 1,
+      "emotes": {
+        "expectedPotMissed": { "index": 7, "chance": 0.7 },
+        "giveUpScratch": { "index": 10, "chance": 0.5 },
+        "accidentalScratch": { "index": 7, "chance": 0.9 },
+        "unexpectedOpponentPot": { "index": 4, "chance": 1.0 },
+        "happyPot": { "index": 14, "chance": 0.75 },
+        "multiPot": { "index": 4, "chance": 0.85 },
+        "streakPot": { "index": 14, "chance": 1.0 },
+        "won": { "index": 14, "chance": 1.0 },
+        "lost": { "index": 7, "chance": 0.25 }
+      }
     },
     "Sebastian": {
-      "favouriteCueIndex": 2
+      "favouriteCueIndex": 2,
+      "emotes": {
+        "expectedPotMissed": { "index": 10, "chance": 0.9 },
+        "giveUpScratch": { "index": 10, "chance": 1.0 },
+        "accidentalScratch": { "index": 7, "chance": 0.6 },
+        "unexpectedOpponentPot": { "index": 4, "chance": 0.6 },
+        "happyPot": { "index": 14, "chance": 0.20 },
+        "multiPot": { "index": 4, "chance": 0.45 },
+        "streakPot": { "index": 14, "chance": 0.35 },
+        "won": { "index": 14, "chance": 0.45 },
+        "lost": { "index": 10, "chance": 0.15 }
+      }
     },
     "Abigail": {
-      "favouriteCueIndex": 3
+      "favouriteCueIndex": 3,
+      "emotes": {
+        "expectedPotMissed": { "index": 3, "chance": 0.85 },
+        "giveUpScratch": { "index": 3, "chance": 0.75 },
+        "accidentalScratch": { "index": 7, "chance": 1.0 },
+        "unexpectedOpponentPot": { "index": 4, "chance": 1.0 },
+        "happyPot": { "index": 14, "chance": 0.90 },
+        "multiPot": { "index": 4, "chance": 1.0 },
+        "streakPot": { "index": 14, "chance": 1.0 },
+        "won": { "index": 14, "chance": 1.0 },
+        "lost": { "index": 3, "chance": 0.35 }
+      }
     },
     "Gus": {
-      "favouriteCueIndex": 4
+      "favouriteCueIndex": 4,
+      "emotes": {
+        "expectedPotMissed": { "index": 7, "chance": 0.5 },
+        "giveUpScratch": { "index": 10, "chance": 0.65 },
+        "accidentalScratch": { "index": 7, "chance": 0.7 },
+        "unexpectedOpponentPot": { "index": 4, "chance": 0.8 },
+        "happyPot": { "index": 14, "chance": 0.55 },
+        "multiPot": { "index": 4, "chance": 0.65 },
+        "streakPot": { "index": 14, "chance": 0.8 },
+        "won": { "index": 14, "chance": 0.9 },
+        "lost": { "index": 10, "chance": 0.20 }
+      }
     }
   }
 }

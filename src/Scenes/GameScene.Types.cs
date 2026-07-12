@@ -18,6 +18,54 @@ namespace StardropPoolMinigameRev.Scenes
 			public float VisualXVelocity { get; set; }
 		}
 
+		private sealed record ActiveEmoteBubble(int EmoteIndex)
+		{
+			public double Milliseconds { get; set; } = EmoteBubbleMilliseconds;
+		}
+
+		private sealed class EmoteMenuButton
+		{
+			public EmoteMenuButton(int emoteIndex, Vector2 startCentre, Vector2 targetCentre)
+			{
+				EmoteIndex = emoteIndex;
+				StartCentre = startCentre;
+				TargetCentre = targetCentre;
+			}
+
+			public int EmoteIndex { get; }
+
+			public Vector2 StartCentre { get; }
+
+			public Vector2 TargetCentre { get; }
+
+			public float OpenProgress { get; set; }
+
+			public float Scale { get; set; } = 1f;
+
+			public Vector2 Centre => Vector2.Lerp(StartCentre, TargetCentre, OpenProgress);
+
+			public Rectangle HitBounds => new(
+				(int)MathF.Round(Centre.X - EmoteMenuButtonSize / 2f),
+				(int)MathF.Round(Centre.Y - EmoteMenuButtonSize / 2f),
+				EmoteMenuButtonSize,
+				EmoteMenuButtonSize
+			);
+
+			public Rectangle DrawBounds
+			{
+				get
+				{
+					int size = Math.Max(1, (int)MathF.Round(EmoteMenuButtonSize * Scale));
+					return new Rectangle(
+						(int)MathF.Round(Centre.X - size / 2f),
+						(int)MathF.Round(Centre.Y - size / 2f),
+						size,
+						size
+					);
+				}
+			}
+		}
+
 		private enum RowElementType
 		{
 			Button,

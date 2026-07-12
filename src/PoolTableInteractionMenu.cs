@@ -21,7 +21,6 @@ namespace StardropPoolMinigameRev
         private static IMonitor? _monitor;
         private static ITranslationHelper? _i18n;
         private static Action<InteractionDecision>? _onDecision;
-        private static readonly Random Random = new();
 
         public static void SetMonitor(IMonitor monitor)
         {
@@ -113,7 +112,7 @@ namespace StardropPoolMinigameRev
 
         private static T PickRandom<T>(IReadOnlyList<T> values)
         {
-            return values[Random.Next(values.Count)];
+            return values[PoolRandom.CreateForGameDate(17).Next(values.Count)];
         }
 
         public static List<string> DetectNpcsNearPoolTable()

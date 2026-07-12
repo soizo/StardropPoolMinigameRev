@@ -30,7 +30,7 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 		}
 
-		private void LoadSnapshot(PoolTableSnapshot? snapshot)
+		private void LoadSnapshot(PoolTableSnapshot? snapshot, bool settleSnapshot)
 		{
 			if (snapshot == null || snapshot.Balls.Count != _balls.Count)
 			{
@@ -77,7 +77,10 @@ namespace StardropPoolMinigameRev.Scenes
 				}
 			}
 
-			AdvanceUntilSettled();
+			if (settleSnapshot)
+			{
+				AdvanceUntilSettled();
+			}
 		}
 
 		private void AdvanceUntilSettled()
@@ -138,6 +141,7 @@ namespace StardropPoolMinigameRev.Scenes
 			_strikeDurationMilliseconds = MathHelper.Lerp(CueStrikeMaximumMilliseconds, CueStrikeMinimumMilliseconds, _strikePowerRatio);
 			_strikeMilliseconds = 0;
 			_hasCueStruckBall = false;
+			BeginShotEvaluation(_activePlayerIndex, fitness: 0f, expectedPot: false, wasGiveUp: false);
 			_isCueStriking = true;
 		}
 
@@ -170,7 +174,7 @@ namespace StardropPoolMinigameRev.Scenes
 			_currentShotScored = false;
 			_isWaitingForShotToSettle = true;
 			_shots++;
-			Game1.playSound("thudStep");
+			PlaySceneSound("thudStep");
 		}
 
 		private static void ApplyFriction(PoolBall ball, float dt)
@@ -191,7 +195,7 @@ namespace StardropPoolMinigameRev.Scenes
 			ball.Velocity = Vector2.Normalize(ball.Velocity) * speed;
 		}
 
-		private static void ResolveWallCollision(PoolBall ball)
+		private void ResolveWallCollision(PoolBall ball)
 		{
 			if (ball.Position.X - BallCollisionRadius < CollisionLeft)
 			{
@@ -301,9 +305,10 @@ namespace StardropPoolMinigameRev.Scenes
 				ball.Velocity = Vector2.Zero;
 				if (ball.IsCueBall)
 				{
+					_lastShotScratched = true;
 					ball.Position = CueBallStart;
 					_scratchMessageMilliseconds = 1500;
-					Game1.playSound("cancel");
+					PlaySceneSound("cancel");
 				}
 				else
 				{
@@ -320,7 +325,12 @@ namespace StardropPoolMinigameRev.Scenes
 							VisualXVelocity = AvatarBallPocketPush
 						});
 					}
-					Game1.playSound("coin");
+					if (ball.Number == 8)
+					{
+						EndMatch(_activePlayerIndex);
+					}
+
+					PlaySceneSound("coin");
 				}
 			}
 		}

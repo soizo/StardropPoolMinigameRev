@@ -3,6 +3,8 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using StardewModdingAPI;
 using StardewValley;
+using StardewValley.Menus;
+using StardropPoolMinigameRev;
 using StardropPoolMinigameRev.Assets;
 using StardropPoolMinigameRev.Constants;
 using StardropPoolMinigameRev.Rendering;
@@ -88,9 +90,23 @@ namespace StardropPoolMinigameRev.Scenes
 		private static readonly Point AvatarOutlineTextureSize = new(AvatarSize.X + AvatarOutlinePadding * 2, AvatarSize.Y + AvatarOutlinePadding * 2 + AvatarOutlineExtraHeight);
 		private const int AvatarBallXOffset = 8;
 		private const int AvatarBallGap = 4;
+		private const int WatchSimulationStartTime = 1910;
+		private const float WatchSimulationStepSeconds = 1f / 30f;
 		private const float AvatarBallVisualSpring = 0.25f;
 		private const float AvatarBallVisualDamping = 0.68f;
 		private const float AvatarBallPocketPush = -3f;
+		private const double EmoteBubbleMilliseconds = 1800;
+		private const double EmoteFrameMilliseconds = 125;
+		private const float HighConfidencePotThreshold = 2500f;
+		private const float LowConfidencePotThreshold = 200f;
+		private const float GiveUpShotThreshold = -500f;
+		private const float GiveUpScratchPowerRatio = 0.45f;
+		private const int EmoteMenuButtonSize = 16;
+		private const int EmoteMenuHoverExtraSize = 2;
+		private const float EmoteMenuRadius = 32f;
+		private const float EmoteMenuOpenProgressStep = 0.14f;
+		private const float EmoteMenuScaleStep = 0.18f;
+		private const double WatchMatchEndDisplayMilliseconds = 1800;
 		private const int AvatarGroupGap = 2;
 		private const int AvatarCapsulePadding = 2;
 		private static readonly Color AvatarCapsuleColour = new(38, 20, 31);
@@ -117,6 +133,8 @@ namespace StardropPoolMinigameRev.Scenes
 			SpriteRects.Cue.Abigail,
 			SpriteRects.Cue.Gus
 		};
+
+		private static readonly int[] EmoteMenuIndices = { 14, 5, 4, 2, 3, 9, 7, 6, 10, 8 };
 
 		private static readonly Rectangle[] RackBallSources =
 		{
@@ -162,7 +180,10 @@ namespace StardropPoolMinigameRev.Scenes
 		private readonly string? _npcOpponentName;
 		private readonly string? _npcPlayerName;
 		private readonly PoolNpcProfiles _profiles;
-		private readonly Random _cueRandom = new();
+		private readonly ModConfig _config;
+		private readonly Random _cueRandom;
+		private readonly Action<int>? _savePlayerCueIndex;
+		private readonly bool _hasLastPlayerCueIndex;
 		private MinigameViewport? _viewport;
 		private RenderTarget2D? _avatarPortraitTarget;
 		private Texture2D? _avatarOutlineTexture;
@@ -193,21 +214,46 @@ namespace StardropPoolMinigameRev.Scenes
 		private bool _currentShotScored;
 		private double _npcThinkMilliseconds;
 		private bool _isNpcShotQueued;
+		private bool _isFastForwarding;
 		private double _scratchMessageMilliseconds;
 		private int _lastPocketedEntryCount;
+		private readonly Dictionary<int, ActiveEmoteBubble> _activeEmotes = new();
+		private readonly List<EmoteMenuButton> _emoteMenuButtons = new();
+		private bool _isEmoteMenuOpen;
+		private readonly Dictionary<int, int> _potStreaks = new();
+		private int _lastShotPlayerIndex = -1;
+		private float _lastShotFitness;
+		private bool _lastShotExpectedPot;
+		private bool _lastShotWasGiveUp;
+		private bool _lastShotScratched;
+		private int _shotPocketedCountBefore;
+		private bool _isMatchEnded;
+		private int _matchWinnerIndex = -1;
+		private bool _hasShownMatchEndMessage;
+		private bool _isWaitingForMatchEndMessage;
+		private bool _isWaitingForReplayAnswer;
+		private double _watchMatchEndDisplayMilliseconds;
+		private DialogueBox? _matchEndDialogue;
 
-		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot, bool isSveInstalled, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null)
+		public GameScene(IMonitor monitor, PoolTableSnapshot? snapshot, bool isSveInstalled, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null, ModConfig? config = null, bool settleSnapshot = true, int? randomSeedDay = null, int lastPlayerCueIndex = -1, Action<int>? savePlayerCueIndex = null)
 		{
 			_monitor = monitor;
 			_isSveInstalled = isSveInstalled;
 			_npcOpponentName = npcOpponentName;
 			_npcPlayerName = npcPlayerName;
 			_profiles = profiles ?? new PoolNpcProfiles();
+			_config = config ?? new ModConfig();
+			_selectedCueIndex = IsCueIndexValid(lastPlayerCueIndex) ? lastPlayerCueIndex : 0;
+			_hasLastPlayerCueIndex = IsCueIndexValid(lastPlayerCueIndex);
+			_savePlayerCueIndex = savePlayerCueIndex;
+			int seedDay = randomSeedDay ?? Game1.Date.TotalDays;
+			_cueRandom = PoolRandom.CreateForGameDate(seedDay, 29);
+			_npcAiRandom = PoolRandom.CreateForGameDate(seedDay, 41);
 			_isGaldoraTheme = DetectGaldoraTheme();
 			InitialiseRowElements();
 			ResetRack();
 			InitialiseMatchParticipants();
-			LoadSnapshot(snapshot);
+			LoadSnapshot(snapshot, settleSnapshot);
 		}
 
 		public SceneId PendingTransition { get; private set; }
@@ -218,7 +264,6 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void Update(GameTime time)
 		{
-			float dt = Math.Min((float)time.ElapsedGameTime.TotalSeconds, 1f / 30f);
 			bool isGaldoraTheme = DetectGaldoraTheme();
 			if (_isGaldoraTheme != isGaldoraTheme)
 			{
@@ -226,36 +271,8 @@ namespace StardropPoolMinigameRev.Scenes
 				InitialiseRowElements();
 			}
 
-			UpdateRowElementScales();
-			UpdatePocketedBallHudMotion();
-			UpdateNpcTurn(time);
-			if (_scratchMessageMilliseconds > 0)
-			{
-				_scratchMessageMilliseconds = Math.Max(0, _scratchMessageMilliseconds - time.ElapsedGameTime.TotalMilliseconds);
-			}
-
-			if (_isCueStriking)
-			{
-				_strikeMilliseconds += time.ElapsedGameTime.TotalMilliseconds;
-				if (_strikeMilliseconds >= _strikeDurationMilliseconds)
-				{
-					FinishCueStrike();
-				}
-			}
-
-			if (!AreBallsMoving())
-			{
-				_showCueAfterStrike = false;
-				if (_isWaitingForShotToSettle)
-				{
-					_isWaitingForShotToSettle = false;
-					AdvanceTurn();
-				}
-
-				return;
-			}
-
-			StepPhysics(dt);
+			UpdateSimulation(time, updateHud: true);
+			UpdateMatchEndFlow(time.ElapsedGameTime.TotalMilliseconds);
 		}
 
 		public void Draw(SpriteBatch batch, MinigameViewport viewport, StardropPoolAssets assets)
@@ -269,10 +286,27 @@ namespace StardropPoolMinigameRev.Scenes
 			DrawTableFront(batch, assets);
 			DrawCueStick(batch, assets);
 			DrawHud(batch, assets);
+			DrawEmoteMenu(batch, assets);
 		}
 
 		public void ReceiveLeftClick(Vector2 logicalPosition)
 		{
+			if (_isMatchEnded)
+			{
+				return;
+			}
+
+			if (_isEmoteMenuOpen)
+			{
+				if (TryClickEmoteMenu(logicalPosition))
+				{
+					return;
+				}
+
+				_isEmoteMenuOpen = false;
+				_emoteMenuButtons.Clear();
+			}
+
 			int rowElementIndex = GetRowElementIndexAt(logicalPosition);
 			if (rowElementIndex >= 0)
 			{
@@ -300,6 +334,11 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void LeftClickHeld(Vector2 logicalPosition)
 		{
+			if (_isMatchEnded)
+			{
+				return;
+			}
+
 			if (_isAiming)
 			{
 				_aimPosition = logicalPosition;
@@ -308,6 +347,16 @@ namespace StardropPoolMinigameRev.Scenes
 
 		public void ReleaseLeftClick(Vector2 logicalPosition)
 		{
+			if (_isMatchEnded)
+			{
+				return;
+			}
+
+			if (_isEmoteMenuOpen)
+			{
+				return;
+			}
+
 			if (_isPressingRowElement)
 			{
 				int rowElementIndex = GetRowElementIndexAt(logicalPosition);
@@ -343,6 +392,10 @@ namespace StardropPoolMinigameRev.Scenes
 		public void ReceiveKeyPress(Keys key)
 		{
 			_monitor.Log($"Game scene key press: {key}.", LogLevel.Info);
+			if (key == Keys.Y)
+			{
+				ToggleEmoteMenu();
+			}
 		}
 
 		public void SettleBalls()
@@ -356,6 +409,241 @@ namespace StardropPoolMinigameRev.Scenes
 			_strikeMilliseconds = 0;
 			_strikeDurationMilliseconds = 0;
 			AdvanceUntilSettled();
+		}
+
+		public void FastForwardWatch(double seconds)
+		{
+			if (!IsWatchMode() || seconds <= 0)
+			{
+				return;
+			}
+
+			_isFastForwarding = true;
+			try
+			{
+				double remaining = seconds;
+				double total = 0;
+				while (remaining > 0)
+				{
+					double step = Math.Min(WatchSimulationStepSeconds, remaining);
+					GameTime time = new(TimeSpan.FromSeconds(total), TimeSpan.FromSeconds(step));
+					UpdateSimulation(time, updateHud: false);
+					UpdateMatchEndFlow(time.ElapsedGameTime.TotalMilliseconds);
+					remaining -= step;
+					total += step;
+				}
+			}
+			finally
+			{
+				_isFastForwarding = false;
+			}
+		}
+
+		private void UpdateSimulation(GameTime time, bool updateHud)
+		{
+			float dt = Math.Min((float)time.ElapsedGameTime.TotalSeconds, WatchSimulationStepSeconds);
+			if (updateHud)
+			{
+				UpdateRowElementScales();
+				UpdatePocketedBallHudMotion();
+				UpdateActiveEmotes(time.ElapsedGameTime.TotalMilliseconds);
+			}
+
+			if (!_isMatchEnded)
+			{
+				UpdateNpcTurn(time);
+			}
+			if (_scratchMessageMilliseconds > 0)
+			{
+				_scratchMessageMilliseconds = Math.Max(0, _scratchMessageMilliseconds - time.ElapsedGameTime.TotalMilliseconds);
+			}
+
+			if (_isCueStriking)
+			{
+				_strikeMilliseconds += time.ElapsedGameTime.TotalMilliseconds;
+				if (_strikeMilliseconds >= _strikeDurationMilliseconds)
+				{
+					FinishCueStrike();
+				}
+			}
+
+			if (!AreBallsMoving())
+			{
+				_showCueAfterStrike = false;
+				if (_isWaitingForShotToSettle)
+				{
+					_isWaitingForShotToSettle = false;
+					EvaluateSettledShot();
+					if (!_isMatchEnded)
+					{
+						AdvanceTurn();
+					}
+				}
+
+				return;
+			}
+
+			StepPhysics(dt);
+		}
+
+		private void RestartWatchGameIfComplete()
+		{
+			if (IsWatchMode() && _isMatchEnded && !AreBallsMoving() && !_isCueStriking && !_isWaitingForShotToSettle)
+			{
+				ResetTable();
+			}
+		}
+
+		private bool IsWatchMode()
+		{
+			return !string.IsNullOrWhiteSpace(_npcPlayerName) && !string.IsNullOrWhiteSpace(_npcOpponentName);
+		}
+
+		private bool IsMatchComplete()
+		{
+			return _isMatchEnded || _balls.Any(ball => ball.Number == 8 && ball.IsPocketed);
+		}
+
+		private void EndMatch(int winnerIndex)
+		{
+			if (_isMatchEnded)
+			{
+				return;
+			}
+
+			_isMatchEnded = true;
+			_matchWinnerIndex = winnerIndex;
+			_isAiming = false;
+			_isNpcShotQueued = false;
+		}
+
+		private void UpdateMatchEndFlow(double elapsedMilliseconds)
+		{
+			if (!_isMatchEnded || AreBallsMoving() || _isCueStriking || _isWaitingForShotToSettle)
+			{
+				return;
+			}
+
+			if (!_hasShownMatchEndMessage)
+			{
+				ShowMatchEndMessage();
+				return;
+			}
+
+			if (IsWatchMode())
+			{
+				_watchMatchEndDisplayMilliseconds = Math.Max(0, _watchMatchEndDisplayMilliseconds - elapsedMilliseconds);
+				if (_watchMatchEndDisplayMilliseconds > 0)
+				{
+					return;
+				}
+
+				CloseMatchEndDialogue();
+				ResetTable();
+				return;
+			}
+
+			if (_isWaitingForMatchEndMessage && Game1.activeClickableMenu == null)
+			{
+				_isWaitingForMatchEndMessage = false;
+				ShowReplayPrompt();
+			}
+		}
+
+		private void ShowMatchEndMessage()
+		{
+			_hasShownMatchEndMessage = true;
+			_isWaitingForMatchEndMessage = true;
+			int winnerIndex = _matchWinnerIndex >= 0 ? _matchWinnerIndex : _activePlayerIndex;
+			int loserIndex = GetOtherPlayerIndex(winnerIndex);
+			ShowProfileEmote(winnerIndex, emotes => emotes.Won);
+			ShowProfileEmote(loserIndex, emotes => emotes.Lost);
+			if (!_isFastForwarding)
+			{
+				_matchEndDialogue = new DialogueBox($"{GetParticipantDisplayName(winnerIndex)} wins");
+				_matchEndDialogue.finishTyping();
+				Game1.activeClickableMenu = _matchEndDialogue;
+				_monitor.Log($"[DEBUG-endmenu] Opened result dialogue; activeMenu={Game1.activeClickableMenu?.GetType().FullName ?? "null"}.", LogLevel.Trace);
+			}
+
+			if (IsWatchMode())
+			{
+				_watchMatchEndDisplayMilliseconds = WatchMatchEndDisplayMilliseconds;
+			}
+		}
+
+		public bool TryDismissMatchEndDialogue()
+		{
+			if (_matchEndDialogue == null || !ReferenceEquals(Game1.activeClickableMenu, _matchEndDialogue))
+			{
+				return false;
+			}
+
+			_matchEndDialogue.closeDialogue();
+			CloseMatchEndDialogue();
+			if (HasHumanParticipant())
+			{
+				ShowReplayPrompt();
+			}
+
+			return true;
+		}
+
+		private void CloseMatchEndDialogue()
+		{
+			if (ReferenceEquals(Game1.activeClickableMenu, _matchEndDialogue))
+			{
+				Game1.exitActiveMenu();
+			}
+
+			_matchEndDialogue = null;
+			_isWaitingForMatchEndMessage = false;
+		}
+
+		private void ShowReplayPrompt()
+		{
+			if (_isWaitingForReplayAnswer)
+			{
+				return;
+			}
+
+			_isWaitingForReplayAnswer = true;
+			Response[] responses =
+			{
+				new("Yes", "Yes"),
+				new("No", "No")
+			};
+			Game1.currentLocation.createQuestionDialogue("Start a new rack?", responses, OnReplayAnswer);
+			_monitor.Log($"[DEBUG-endmenu] Opened replay prompt; activeMenu={Game1.activeClickableMenu?.GetType().FullName ?? "null"}.", LogLevel.Trace);
+		}
+
+		private void OnReplayAnswer(Farmer who, string answer)
+		{
+			_isWaitingForReplayAnswer = false;
+			if (string.Equals(answer, "Yes", StringComparison.OrdinalIgnoreCase))
+			{
+				ResetTable();
+				return;
+			}
+
+			PendingTransition = SceneId.Quit;
+		}
+
+		private string GetParticipantDisplayName(int playerIndex)
+		{
+			AvatarHudEntry? entry = GetAvatarHudEntries().FirstOrDefault(entry => entry.PlayerIndex == playerIndex);
+			if (entry?.Farmer != null)
+			{
+				return string.IsNullOrWhiteSpace(entry.Farmer.Name) ? "Farmer" : entry.Farmer.Name;
+			}
+
+			if (entry?.Npc != null)
+			{
+				return string.IsNullOrWhiteSpace(entry.Npc.displayName) ? entry.Npc.Name : entry.Npc.displayName;
+			}
+
+			string? npcName = GetNpcNameForPlayerIndex(playerIndex);
+			return string.IsNullOrWhiteSpace(npcName) ? "Unknown player" : npcName;
 		}
 
 		public void ResetTable()
@@ -375,6 +663,21 @@ namespace StardropPoolMinigameRev.Scenes
 			_playerAssignedBallType = 0;
 			_npcThinkMilliseconds = 0;
 			_isNpcShotQueued = false;
+			_lastShotPlayerIndex = -1;
+			_lastShotFitness = 0;
+			_lastShotExpectedPot = false;
+			_lastShotWasGiveUp = false;
+			_lastShotScratched = false;
+			_shotPocketedCountBefore = 0;
+			_isMatchEnded = false;
+			_matchWinnerIndex = -1;
+			_hasShownMatchEndMessage = false;
+			_isWaitingForMatchEndMessage = false;
+			_isWaitingForReplayAnswer = false;
+			_watchMatchEndDisplayMilliseconds = 0;
+			_matchEndDialogue = null;
+			_activeEmotes.Clear();
+			_potStreaks.Clear();
 			_pocketedBallEntries.Clear();
 			ResetRack();
 			InitialiseMatchParticipants();
@@ -393,34 +696,29 @@ namespace StardropPoolMinigameRev.Scenes
 
 		private void ResolveParticipantCues(bool playerHasPriority, bool randomisePlayerCue = false)
 		{
-			List<AvatarHudEntry> entries = GetAvatarHudEntries();
 			_participantCueIndices.Clear();
 			if (HasHumanParticipant() && playerHasPriority)
 			{
 				if (randomisePlayerCue)
 				{
-					_selectedCueIndex = ChooseRandomPlayerCue(new HashSet<int>());
+					_selectedCueIndex = ChoosePreferredPlayerCue(new HashSet<int>());
 				}
 
 				_participantCueIndices[0] = _selectedCueIndex;
+				_savePlayerCueIndex?.Invoke(_selectedCueIndex);
 			}
 
-			foreach (AvatarHudEntry entry in entries)
+			foreach ((int playerIndex, string npcName) in GetParticipantNpcNames())
 			{
-				if (entry.Npc == null)
-				{
-					continue;
-				}
-
-				int cueIndex = ChooseNpcCue(entry.Npc.Name, _participantCueIndices.Values.ToHashSet());
-				_participantCueIndices[entry.PlayerIndex] = cueIndex;
+				int cueIndex = ChooseNpcCue(npcName, _participantCueIndices.Values.ToHashSet());
+				_participantCueIndices[playerIndex] = cueIndex;
 			}
 
 			if (HasHumanParticipant())
 			{
 				if (randomisePlayerCue && !playerHasPriority)
 				{
-					_selectedCueIndex = ChooseRandomPlayerCue(GetNpcCueIndices());
+					_selectedCueIndex = ChoosePreferredPlayerCue(GetNpcCueIndices());
 				}
 				else if (IsCueOccupiedByNpc(_selectedCueIndex))
 				{
@@ -428,12 +726,26 @@ namespace StardropPoolMinigameRev.Scenes
 				}
 
 				_participantCueIndices[0] = _selectedCueIndex;
+				_savePlayerCueIndex?.Invoke(_selectedCueIndex);
 			}
 		}
 
 		private bool HasHumanParticipant()
 		{
 			return string.IsNullOrWhiteSpace(_npcPlayerName);
+		}
+
+		private IEnumerable<(int PlayerIndex, string NpcName)> GetParticipantNpcNames()
+		{
+			if (!string.IsNullOrWhiteSpace(_npcPlayerName))
+			{
+				yield return (0, _npcPlayerName);
+			}
+
+			if (!string.IsNullOrWhiteSpace(_npcOpponentName))
+			{
+				yield return (1, _npcOpponentName);
+			}
 		}
 
 		private int ChooseNpcCue(string npcName, HashSet<int> occupiedCues)
@@ -470,6 +782,13 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 
 			return available;
+		}
+
+		private int ChoosePreferredPlayerCue(HashSet<int> occupiedCues)
+		{
+			return _hasLastPlayerCueIndex && IsCueIndexValid(_selectedCueIndex) && !occupiedCues.Contains(_selectedCueIndex)
+				? _selectedCueIndex
+				: ChooseRandomPlayerCue(occupiedCues);
 		}
 
 		private int ChooseRandomPlayerCue(HashSet<int> occupiedCues)
@@ -648,8 +967,21 @@ namespace StardropPoolMinigameRev.Scenes
 			return MathHelper.Lerp(MinimumImpactVolume, MaximumImpactVolume, MathHelper.Clamp(t, 0f, 1f));
 		}
 
-		private static void PlayImpactSound(string cueName, float impactSpeed, float minimumImpactSpeed)
+		private void PlaySceneSound(string cueName)
 		{
+			if (!_isFastForwarding)
+			{
+				Game1.playSound(cueName);
+			}
+		}
+
+		private void PlayImpactSound(string cueName, float impactSpeed, float minimumImpactSpeed)
+		{
+			if (_isFastForwarding)
+			{
+				return;
+			}
+
 			float volume = GetImpactVolume(impactSpeed, minimumImpactSpeed);
 			var cue = Game1.soundBank.GetCue(cueName);
 			cue.SetVariable("Volume", MathHelper.Lerp(-12f, 0f, volume));
@@ -701,6 +1033,14 @@ namespace StardropPoolMinigameRev.Scenes
 			}
 
 			NpcShotCandidate shot = FindBestNpcShot();
+			bool expectedPot = IsHighConfidencePotShot(shot);
+			bool giveUp = shot.Fitness <= GiveUpShotThreshold;
+			if (giveUp)
+			{
+				shot = CreateGiveUpScratchShot(cueBall);
+				expectedPot = false;
+			}
+
 			_strikeDirection = shot.Direction;
 			_strikeCueBallPosition = cueBall.Position;
 			_strikePowerRatio = shot.PowerRatio;
@@ -709,7 +1049,310 @@ namespace StardropPoolMinigameRev.Scenes
 			_hasCueStruckBall = false;
 			_currentShotScored = false;
 			_activeShotPower = ShotPower;
+			BeginShotEvaluation(_activePlayerIndex, shot.Fitness, expectedPot, giveUp);
 			_isCueStriking = true;
+		}
+
+		private void BeginShotEvaluation(int playerIndex, float fitness, bool expectedPot, bool wasGiveUp)
+		{
+			_lastShotPlayerIndex = playerIndex;
+			_lastShotFitness = fitness;
+			_lastShotExpectedPot = expectedPot;
+			_lastShotWasGiveUp = wasGiveUp;
+			_lastShotScratched = false;
+			_shotPocketedCountBefore = _pocketed;
+		}
+
+		private bool IsHighConfidencePotShot(NpcShotCandidate shot)
+		{
+			return shot.Fitness >= HighConfidencePotThreshold && DoesShotExpectPot(shot);
+		}
+
+		private bool IsLowConfidenceShot()
+		{
+			return !_lastShotExpectedPot && _lastShotFitness <= LowConfidencePotThreshold;
+		}
+
+		private bool DoesShotExpectPot(NpcShotCandidate shot)
+		{
+			PoolBall? cueBall = GetCueBall();
+			if (cueBall == null)
+			{
+				return false;
+			}
+
+			PoolBall? hitBall = FindFirstBallOnShotPath(cueBall.Position, shot.Direction);
+			if (hitBall == null)
+			{
+				return false;
+			}
+
+			int npcBallType = GetAssignedBallTypeForPlayer(_activePlayerIndex);
+			int hitBallType = GetBallType(hitBall);
+			bool isOwnBall = npcBallType == 0
+				? hitBall.Number != 8
+				: hitBallType == npcBallType || (hitBall.Number == 8 && !HasRemainingBallsOfType(npcBallType));
+			if (!isOwnBall)
+			{
+				return false;
+			}
+
+			Vector2 targetDirection = hitBall.Position - cueBall.Position;
+			if (targetDirection.LengthSquared() > 1f)
+			{
+				targetDirection.Normalize();
+			}
+			else
+			{
+				targetDirection = shot.Direction;
+			}
+
+			Vector2 targetEnd = hitBall.Position + targetDirection * NpcAiTargetBallTravelScale * shot.PowerRatio;
+			return IsPocketPath(hitBall.Position, targetEnd);
+		}
+
+		private NpcShotCandidate CreateGiveUpScratchShot(PoolBall cueBall)
+		{
+			Vector2 pocket = PocketCentres.OrderBy(pocket => Vector2.DistanceSquared(cueBall.Position, pocket)).First();
+			Vector2 direction = pocket - cueBall.Position;
+			if (direction.LengthSquared() <= 1f)
+			{
+				direction = Vector2.UnitX;
+			}
+			else
+			{
+				direction.Normalize();
+			}
+
+			Vector2 vector = direction * NpcAiMaximumVectorLength * GiveUpScratchPowerRatio;
+			return new NpcShotCandidate(vector.X, vector.Y, GiveUpShotThreshold);
+		}
+
+		private void EvaluateSettledShot()
+		{
+			if (_lastShotPlayerIndex < 0 || _isFastForwarding)
+			{
+				return;
+			}
+
+			int pottedCount = _pocketed - _shotPocketedCountBefore;
+			bool potted = pottedCount > 0;
+			if (potted)
+			{
+				_potStreaks.TryGetValue(_lastShotPlayerIndex, out int streak);
+				streak++;
+				_potStreaks[_lastShotPlayerIndex] = streak;
+
+				bool showedPotEmote = false;
+				if (pottedCount >= 2)
+				{
+					showedPotEmote = TryShowProfileEmote(_lastShotPlayerIndex, emotes => emotes.MultiPot);
+				}
+
+				if (!showedPotEmote && streak >= GetStreakTarget(_lastShotPlayerIndex))
+				{
+					showedPotEmote = TryShowProfileEmote(_lastShotPlayerIndex, emotes => emotes.StreakPot);
+					_potStreaks[_lastShotPlayerIndex] = 0;
+				}
+
+				if (!showedPotEmote)
+				{
+					ShowProfileEmote(_lastShotPlayerIndex, emotes => emotes.HappyPot);
+				}
+			}
+			else
+			{
+				_potStreaks[_lastShotPlayerIndex] = 0;
+			}
+
+			if (_lastShotWasGiveUp)
+			{
+				ShowProfileEmote(_lastShotPlayerIndex, emotes => emotes.GiveUpScratch);
+				return;
+			}
+
+			if (_lastShotScratched)
+			{
+				ShowProfileEmote(_lastShotPlayerIndex, emotes => emotes.AccidentalScratch);
+				return;
+			}
+
+			if (_lastShotExpectedPot && !potted)
+			{
+				ShowProfileEmote(_lastShotPlayerIndex, emotes => emotes.ExpectedPotMissed);
+				return;
+			}
+
+			if (potted && IsLowConfidenceShot())
+			{
+				int otherPlayerIndex = GetOtherPlayerIndex(_lastShotPlayerIndex);
+				ShowProfileEmote(otherPlayerIndex, emotes => emotes.UnexpectedOpponentPot);
+			}
+		}
+
+		private int GetStreakTarget(int playerIndex)
+		{
+			unchecked
+			{
+				int seed = Game1.Date.TotalDays;
+				seed = seed * 397 ^ Game1.timeOfDay;
+				seed = seed * 397 ^ playerIndex;
+				return new Random(seed).Next(2, 4);
+			}
+		}
+
+		private int GetOtherPlayerIndex(int playerIndex)
+		{
+			int playerCount = GetAvatarHudEntries().Count;
+			return playerCount <= 1 ? playerIndex : (playerIndex + 1) % playerCount;
+		}
+
+		private void ShowProfileEmote(int playerIndex, Func<PoolNpcEmotes, PoolNpcEmoteOption> selector)
+		{
+			TryShowProfileEmote(playerIndex, selector);
+		}
+
+		private bool TryShowProfileEmote(int playerIndex, Func<PoolNpcEmotes, PoolNpcEmoteOption> selector)
+		{
+			string? npcName = GetNpcNameForPlayerIndex(playerIndex);
+			if (string.IsNullOrWhiteSpace(npcName) || !_profiles.Npcs.TryGetValue(npcName, out PoolNpcProfile? profile))
+			{
+				return false;
+			}
+
+			PoolNpcEmoteOption option = selector(profile.Emotes);
+			option.Clamp();
+			if (option.Index == PoolNpcEmotes.DisabledIndex || !ShouldShowEmote(playerIndex, option))
+			{
+				return false;
+			}
+
+			_activeEmotes[playerIndex] = new ActiveEmoteBubble(option.Index);
+			return true;
+		}
+
+		private bool ShouldShowEmote(int playerIndex, PoolNpcEmoteOption option)
+		{
+			float chance = IsWatchMode() ? option.Chance * 0.5f : option.Chance;
+			if (chance >= 1f)
+			{
+				return true;
+			}
+
+			if (chance <= 0f)
+			{
+				return false;
+			}
+
+			unchecked
+			{
+				int seed = Game1.Date.TotalDays;
+				seed = seed * 397 ^ Game1.timeOfDay;
+				seed = seed * 397 ^ _shots;
+				seed = seed * 397 ^ playerIndex;
+				seed = seed * 397 ^ option.Index;
+				return new Random(seed).NextDouble() <= chance;
+			}
+		}
+
+		private string? GetNpcNameForPlayerIndex(int playerIndex)
+		{
+			if (playerIndex == 0 && !string.IsNullOrWhiteSpace(_npcPlayerName))
+			{
+				return _npcPlayerName;
+			}
+
+			if (playerIndex == 1 && !string.IsNullOrWhiteSpace(_npcOpponentName))
+			{
+				return _npcOpponentName;
+			}
+
+			return null;
+		}
+
+		private void ToggleEmoteMenu()
+		{
+			if (!HasHumanParticipant() || _isAiming || _isCueStriking || _showCueAfterStrike)
+			{
+				return;
+			}
+
+			_isEmoteMenuOpen = !_isEmoteMenuOpen;
+			_emoteMenuButtons.Clear();
+			if (!_isEmoteMenuOpen)
+			{
+				return;
+			}
+
+			Vector2 centre = GetClampedEmoteMenuCentre(GetCurrentPointerLogicalPosition());
+			for (int i = 0; i < EmoteMenuIndices.Length; i++)
+			{
+				float angle = -MathHelper.PiOver2 + MathHelper.TwoPi * i / EmoteMenuIndices.Length;
+				Vector2 position = centre + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * EmoteMenuRadius;
+				float x = MathHelper.Clamp(position.X, EmoteMenuButtonSize / 2f, MinigameViewport.LogicalWidth - EmoteMenuButtonSize / 2f);
+				float y = MathHelper.Clamp(position.Y, EmoteMenuButtonSize / 2f, MinigameViewport.LogicalHeight - EmoteMenuButtonSize / 2f);
+				_emoteMenuButtons.Add(new EmoteMenuButton(EmoteMenuIndices[i], centre, new Vector2(x, y)));
+			}
+		}
+
+		private static Vector2 GetClampedEmoteMenuCentre(Vector2 centre)
+		{
+			float margin = EmoteMenuRadius + EmoteMenuButtonSize / 2f;
+			return new Vector2(
+				MathHelper.Clamp(centre.X, margin, MinigameViewport.LogicalWidth - margin),
+				MathHelper.Clamp(centre.Y, margin, MinigameViewport.LogicalHeight - margin)
+			);
+		}
+
+		private bool TryClickEmoteMenu(Vector2 logicalPosition)
+		{
+			Point point = ToPoint(logicalPosition);
+			foreach (EmoteMenuButton button in _emoteMenuButtons)
+			{
+				if (button.HitBounds.Contains(point))
+				{
+					_activeEmotes[0] = new ActiveEmoteBubble(button.EmoteIndex);
+					_isEmoteMenuOpen = false;
+					_emoteMenuButtons.Clear();
+					PlaySceneSound("drumkit6");
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		private void UpdateActiveEmotes(double elapsedMilliseconds)
+		{
+			UpdateEmoteMenuButtons();
+
+			foreach (int playerIndex in _activeEmotes.Keys.ToList())
+			{
+				ActiveEmoteBubble bubble = _activeEmotes[playerIndex];
+				bubble.Milliseconds -= elapsedMilliseconds;
+				if (bubble.Milliseconds <= 0)
+				{
+					_activeEmotes.Remove(playerIndex);
+				}
+			}
+		}
+
+		private void UpdateEmoteMenuButtons()
+		{
+			if (!_isEmoteMenuOpen)
+			{
+				return;
+			}
+
+			Point pointer = ToPoint(GetCurrentPointerLogicalPosition());
+			foreach (EmoteMenuButton button in _emoteMenuButtons)
+			{
+				button.OpenProgress = Math.Min(1f, button.OpenProgress + EmoteMenuOpenProgressStep);
+				float targetScale = button.HitBounds.Contains(pointer)
+					? (EmoteMenuButtonSize + EmoteMenuHoverExtraSize) / (float)EmoteMenuButtonSize
+					: 1f;
+				button.Scale = Approach(button.Scale, targetScale, EmoteMenuScaleStep);
+			}
 		}
 
 		private IEnumerable<PoolBall> GetNpcTargetBalls()

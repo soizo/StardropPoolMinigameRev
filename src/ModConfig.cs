@@ -8,8 +8,17 @@ namespace StardropPoolMinigameRev
         AlwaysWatch
     }
 
+    internal enum EmoteEightAppearance
+    {
+        Default,
+        BigEyes,
+        SmallEyes
+    }
+
     internal sealed class ModConfig
     {
         public PoolTableInteractionMode InteractionMode { get; set; } = PoolTableInteractionMode.Default;
+
+        public EmoteEightAppearance EmoteEightAppearance { get; set; } = EmoteEightAppearance.Default;
     }
 }

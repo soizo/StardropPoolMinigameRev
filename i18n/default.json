@@ -12,5 +12,10 @@
   "config.interaction-mode.default": "Default pool table interaction",
   "config.interaction-mode.always-solo": "Always solo",
   "config.interaction-mode.always-vs-npc": "Always vs NPC (random person)",
-  "config.interaction-mode.always-watch": "Always watch (random people)"
+  "config.interaction-mode.always-watch": "Always watch (random people)",
+  "config.emote-eight-appearance.name": "Eye emote appearance",
+  "config.emote-eight-appearance.tooltip": "Choose which eye emote art is used when emote 8 is shown.",
+  "config.emote-eight-appearance.default": "Default",
+  "config.emote-eight-appearance.big-eyes": "Big eyes",
+  "config.emote-eight-appearance.small-eyes": "Small eyes"
 }

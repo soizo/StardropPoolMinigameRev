@@ -23,9 +23,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="profile.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Assets\Tilesheets\stardropPool.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="[CP] StardropPoolMinigameRev\Assets\Tilesheets\stardropPool.png" Link="Assets\Tilesheets\stardropPool.png">
+    <None Update="Assets\Tilesheets\upsidedown_emotes.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
