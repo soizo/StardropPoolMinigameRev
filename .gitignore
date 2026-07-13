@@ -40,3 +40,9 @@ TestResults/
 # Python cache created by auxiliary tooling
 __pycache__/
 *.pyc
+
+# Claude Code
+.claude/
+
+# PERSONAL_DOCS
+PERSONAL_DOCS/
