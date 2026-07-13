@@ -35,7 +35,7 @@
 
   <Target Name="DeployModAllowlist" AfterTargets="AfterBuild">
     <ItemGroup>
-      <ModDeploymentContent Include="manifest.json;profile.json;i18n/**;Assets/**" />
+      <ModDeploymentContent Include="manifest.json;profile.json;i18n/**;Assets/**" Exclude="**/.DS_Store" />
     </ItemGroup>
     <MakeDir Directories="$(GameModsPath)/$(ModFolderName)" />
     <Copy
