@@ -48,6 +48,8 @@ namespace StardropPoolMinigameRev.Scenes
 		private const float MaxPullDistance = 72f;
 		private const float ShotPower = 7.5f;
 		private const float NpcShotThinkMilliseconds = 700f;
+		private const double WatchNpcWaitMinimumMilliseconds = 300;
+		private const double WatchNpcWaitMaximumMilliseconds = 700;
 		private const float FrictionPerSecond = 150f;
 		private const float WallRestitution = 0.92f;
 		private const float BallRestitution = 0.96f;
@@ -92,6 +94,7 @@ namespace StardropPoolMinigameRev.Scenes
 		private const int AvatarBallGap = 4;
 		private const int WatchSimulationStartTime = 1910;
 		private const float WatchSimulationStepSeconds = 1f / 30f;
+		private const int WatchCatchUpStepBudget = 60;
 		private const float AvatarBallVisualSpring = 0.25f;
 		private const float AvatarBallVisualDamping = 0.68f;
 		private const float AvatarBallPocketPush = -3f;
@@ -181,7 +184,8 @@ namespace StardropPoolMinigameRev.Scenes
 		private readonly string? _npcPlayerName;
 		private readonly PoolNpcProfiles _profiles;
 		private readonly ModConfig _config;
-		private readonly Random _cueRandom;
+		private readonly PoolRandom _cueRandom;
+		private readonly PoolRandom _watchTimingRandom;
 		private readonly Action<int>? _savePlayerCueIndex;
 		private readonly bool _hasLastPlayerCueIndex;
 		private MinigameViewport? _viewport;
@@ -214,7 +218,13 @@ namespace StardropPoolMinigameRev.Scenes
 		private bool _currentShotScored;
 		private double _npcThinkMilliseconds;
 		private bool _isNpcShotQueued;
+		private double _watchNpcPendingWaitMilliseconds;
+		private float _committedNpcShotFitness;
+		private bool _committedNpcShotExpectedPot;
+		private bool _committedNpcShotWasGiveUp;
+
 		private bool _isFastForwarding;
+		private double _watchCatchUpSeconds;
 		private double _scratchMessageMilliseconds;
 		private int _lastPocketedEntryCount;
 		private readonly Dictionary<int, ActiveEmoteBubble> _activeEmotes = new();
@@ -249,6 +259,7 @@ namespace StardropPoolMinigameRev.Scenes
 			int seedDay = randomSeedDay ?? Game1.Date.TotalDays;
 			_cueRandom = PoolRandom.CreateForGameDate(seedDay, 29);
 			_npcAiRandom = PoolRandom.CreateForGameDate(seedDay, 41);
+			_watchTimingRandom = PoolRandom.CreateForGameDate(seedDay, 53);
 			_isGaldoraTheme = DetectGaldoraTheme();
 			InitialiseRowElements();
 			ResetRack();
@@ -401,19 +412,43 @@ namespace StardropPoolMinigameRev.Scenes
 		public void SettleBalls()
 		{
 			_isAiming = false;
+			if (_isCueStriking && !_hasCueStruckBall)
+			{
+				FinishCueStrike();
+			}
+
 			_isCueStriking = false;
 			_showCueAfterStrike = false;
-			_isWaitingForShotToSettle = false;
 			_hasCueStruckBall = false;
-			_currentShotScored = false;
 			_strikeMilliseconds = 0;
 			_strikeDurationMilliseconds = 0;
 			AdvanceUntilSettled();
+
+			if (_isWaitingForShotToSettle)
+			{
+				_isWaitingForShotToSettle = false;
+				EvaluateSettledShot();
+				if (!_isMatchEnded)
+				{
+					AdvanceTurn();
+				}
+			}
 		}
+
+		public bool IsWatchCatchUpPending => _watchCatchUpSeconds > 0;
 
 		public void FastForwardWatch(double seconds)
 		{
-			if (!IsWatchMode() || seconds <= 0)
+			if (IsWatchMode() && seconds > 0)
+			{
+				_watchCatchUpSeconds += seconds;
+			}
+		}
+
+		public void ProcessWatchCatchUp(double elapsedSeconds)
+		{
+			FastForwardWatch(elapsedSeconds);
+			if (!IsWatchCatchUpPending)
 			{
 				return;
 			}
@@ -421,16 +456,13 @@ namespace StardropPoolMinigameRev.Scenes
 			_isFastForwarding = true;
 			try
 			{
-				double remaining = seconds;
-				double total = 0;
-				while (remaining > 0)
+				for (int step = 0; step < WatchCatchUpStepBudget && _watchCatchUpSeconds > 0; step++)
 				{
-					double step = Math.Min(WatchSimulationStepSeconds, remaining);
-					GameTime time = new(TimeSpan.FromSeconds(total), TimeSpan.FromSeconds(step));
+					double elapsed = Math.Min(WatchSimulationStepSeconds, _watchCatchUpSeconds);
+					GameTime time = new(TimeSpan.Zero, TimeSpan.FromSeconds(elapsed));
 					UpdateSimulation(time, updateHud: false);
 					UpdateMatchEndFlow(time.ElapsedGameTime.TotalMilliseconds);
-					remaining -= step;
-					total += step;
+					_watchCatchUpSeconds -= elapsed;
 				}
 			}
 			finally
@@ -663,6 +695,7 @@ namespace StardropPoolMinigameRev.Scenes
 			_playerAssignedBallType = 0;
 			_npcThinkMilliseconds = 0;
 			_isNpcShotQueued = false;
+			CancelWatchNpcWait();
 			_lastShotPlayerIndex = -1;
 			_lastShotFitness = 0;
 			_lastShotExpectedPot = false;
@@ -994,13 +1027,20 @@ namespace StardropPoolMinigameRev.Scenes
 			{
 				_npcThinkMilliseconds = 0;
 				_isNpcShotQueued = false;
+				CancelWatchNpcWait();
+				return;
+			}
+
+			if (_watchNpcPendingWaitMilliseconds > 0)
+			{
+				UpdateWatchNpcWait(time.ElapsedGameTime.TotalMilliseconds);
 				return;
 			}
 
 			if (!_isNpcShotQueued)
 			{
 				_isNpcShotQueued = true;
-				_npcThinkMilliseconds = NpcShotThinkMilliseconds;
+				_npcThinkMilliseconds = IsWatchMode() ? 0 : NpcShotThinkMilliseconds;
 			}
 
 			_npcThinkMilliseconds -= time.ElapsedGameTime.TotalMilliseconds;
@@ -1049,8 +1089,42 @@ namespace StardropPoolMinigameRev.Scenes
 			_hasCueStruckBall = false;
 			_currentShotScored = false;
 			_activeShotPower = ShotPower;
+			if (IsWatchMode())
+			{
+				BeginWatchNpcWait(shot.Fitness, expectedPot, giveUp);
+				return;
+			}
+
 			BeginShotEvaluation(_activePlayerIndex, shot.Fitness, expectedPot, giveUp);
 			_isCueStriking = true;
+		}
+
+		private void BeginWatchNpcWait(float fitness, bool expectedPot, bool wasGiveUp)
+		{
+			_watchNpcPendingWaitMilliseconds = _watchTimingRandom.Next(
+				(int)WatchNpcWaitMinimumMilliseconds,
+				(int)WatchNpcWaitMaximumMilliseconds + 1);
+			_committedNpcShotFitness = fitness;
+			_committedNpcShotExpectedPot = expectedPot;
+			_committedNpcShotWasGiveUp = wasGiveUp;
+		}
+
+		private void UpdateWatchNpcWait(double elapsedMilliseconds)
+		{
+			_watchNpcPendingWaitMilliseconds -= elapsedMilliseconds;
+			if (_watchNpcPendingWaitMilliseconds > 0)
+			{
+				return;
+			}
+
+			_watchNpcPendingWaitMilliseconds = 0;
+			BeginShotEvaluation(_activePlayerIndex, _committedNpcShotFitness, _committedNpcShotExpectedPot, _committedNpcShotWasGiveUp);
+			_isCueStriking = true;
+		}
+
+		private void CancelWatchNpcWait()
+		{
+			_watchNpcPendingWaitMilliseconds = 0;
 		}
 
 		private void BeginShotEvaluation(int playerIndex, float fitness, bool expectedPot, bool wasGiveUp)

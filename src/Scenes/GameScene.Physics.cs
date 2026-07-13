@@ -49,6 +49,32 @@ namespace StardropPoolMinigameRev.Scenes
 			_pocketed = snapshot.Pocketed;
 			_activePlayerIndex = MathHelper.Clamp(snapshot.ActivePlayerIndex, 0, GetAvatarHudEntries().Count - 1);
 			_playerAssignedBallType = MathHelper.Clamp(snapshot.PlayerAssignedBallType, -1, 1);
+			_isMatchEnded = snapshot.IsMatchEnded || snapshot.Balls.Any(ball => ball.Index > 0 && ball.Index < _balls.Count && ball.IsPocketed && _balls[ball.Index].Number == 8);
+			_matchWinnerIndex = _isMatchEnded ? MathHelper.Clamp(snapshot.MatchWinnerIndex >= 0 ? snapshot.MatchWinnerIndex : snapshot.ActivePlayerIndex, 0, GetAvatarHudEntries().Count - 1) : -1;
+			if (snapshot.CueRandomState != 0)
+			{
+				_cueRandom.State = snapshot.CueRandomState;
+			}
+			if (snapshot.NpcAiRandomState != 0)
+			{
+				_npcAiRandom.State = snapshot.NpcAiRandomState;
+			}
+			_watchCatchUpSeconds = Math.Max(0, snapshot.WatchCatchUpSeconds);
+			if (snapshot.WatchTimingRandomState != 0)
+			{
+				_watchTimingRandom.State = snapshot.WatchTimingRandomState;
+			}
+			if (IsWatchMode())
+			{
+				_watchNpcPendingWaitMilliseconds = Math.Max(0, snapshot.WatchNpcPendingWaitMilliseconds);
+				_strikeDirection = new Vector2(snapshot.CommittedNpcShotDirectionX, snapshot.CommittedNpcShotDirectionY);
+				_strikeCueBallPosition = _balls[0].Position;
+				_strikePowerRatio = snapshot.CommittedNpcShotPowerRatio;
+				_committedNpcShotFitness = snapshot.CommittedNpcShotFitness;
+				_committedNpcShotExpectedPot = snapshot.CommittedNpcShotExpectedPot;
+				_committedNpcShotWasGiveUp = snapshot.CommittedNpcShotWasGiveUp;
+			}
+
 			_pocketedBallEntries.Clear();
 			for (int i = 0; i < snapshot.Balls.Count; i++)
 			{

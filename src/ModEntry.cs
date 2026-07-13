@@ -1,5 +1,8 @@
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using System.Diagnostics;
 using StardewValley;
 using StardropPoolMinigameRev.Scenes;
 using System.Text.Json;
@@ -10,6 +13,10 @@ namespace StardropPoolMinigameRev
     {
         private const string SaveDataKey = "pool-table-state";
         private const string ProfileFileName = "profile.json";
+        private const string WatchPresenceKey = "StardropPoolMinigameRev/WatchPresence";
+        private const string WatchPresenceMessageType = "watch-presence";
+        private const int WatchStartTime = 1910;
+        private const int WatchSlotMinutes = 10;
         private static readonly string[] ProfileNpcNames = { "Sam", "Sebastian", "Abigail", "Gus" };
         private static readonly JsonSerializerOptions ProfileJsonOptions = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
         private static readonly string[] InteractionModeValues =
@@ -29,6 +36,14 @@ namespace StardropPoolMinigameRev
         private PoolTableSaveData _saveData = new();
         private ModConfig _config = new();
         private PoolNpcProfiles _profiles = new();
+        private readonly Stopwatch _watchClock = new();
+        private bool _isWatching;
+        private long _watchLastElapsedMilliseconds;
+        private bool _wasWatchActive;
+        private int _watchDay;
+        private int _watchSlot;
+        private string? _watchFirstNpcName;
+        private string? _watchSecondNpcName;
 
         public override void Entry(IModHelper helper)
         {
@@ -39,12 +54,123 @@ namespace StardropPoolMinigameRev
             helper.Events.GameLoop.DayStarted += OnDayStarted;
             helper.Events.GameLoop.Saving += OnSaving;
             helper.Events.GameLoop.GameLaunched += OnGameLaunched;
+            helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
+            helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
+            helper.Events.Display.RenderedWorld += OnRenderedWorld;
+            helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonsChanged += OnButtonsChanged;
             PoolTableInteractionMenu.SetMonitor(Monitor);
             PoolTableInteractionMenu.SetTranslationHelper(Helper.Translation);
             PoolTableInteractionMenu.SetDecisionHandler(HandleInteractionDecision);
             Monitor.Log("Stardrop Pool Minigame Rev loaded.", LogLevel.Info);
+        }
+
+        private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
+        {
+            if (!_isWatching || Game1.currentMinigame is not StardropPoolMinigameRev)
+            {
+                if (_isWatching)
+                {
+                    ClearWatchPresence();
+                }
+                return;
+            }
+
+            if (!Game1.game1.IsActive)
+            {
+                _wasWatchActive = false;
+                return;
+            }
+
+            long elapsedMilliseconds = _watchClock.ElapsedMilliseconds;
+            if (!_wasWatchActive)
+            {
+                long inactiveMilliseconds = Math.Max(0, elapsedMilliseconds - _watchLastElapsedMilliseconds);
+                if (inactiveMilliseconds > 0 && Game1.currentMinigame is StardropPoolMinigameRev minigame)
+                {
+                    minigame.FastForwardWatch(TimeSpan.FromMilliseconds(inactiveMilliseconds).TotalSeconds);
+                }
+            }
+
+            _watchLastElapsedMilliseconds = elapsedMilliseconds;
+            _wasWatchActive = true;
+        }
+
+        private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
+        {
+            ClearWatchPresence();
+        }
+
+        private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
+        {
+            if (e.FromModID != ModManifest.UniqueID || e.Type != WatchPresenceMessageType)
+            {
+                return;
+            }
+
+            // Presence is stored in farmer modData; the immediate message prompts installed clients to redraw.
+        }
+
+        private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
+        {
+            if (!Context.IsWorldReady)
+            {
+                return;
+            }
+
+            foreach (Farmer farmer in Game1.getOnlineFarmers())
+            {
+                if (farmer.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID || !farmer.modData.TryGetValue(WatchPresenceKey, out string? value) || string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                Vector2 position = farmer.getStandingPosition() + new Vector2(-32f - Game1.viewport.X, -96f - Game1.viewport.Y);
+                string message = Helper.Translation.Get("presence.watching-pool").Default("Watching pool");
+                StardewValley.BellsAndWhistles.SpriteText.drawString(e.SpriteBatch, message, (int)position.X, (int)position.Y, alpha: 0.8f, layerDepth: 1f);
+            }
+        }
+
+        private void BeginWatchPresence(string firstNpcName, string secondNpcName, int day, int slot)
+        {
+            _isWatching = true;
+            _watchFirstNpcName = firstNpcName;
+            _watchSecondNpcName = secondNpcName;
+            _watchDay = day;
+            _watchSlot = slot;
+            _watchLastElapsedMilliseconds = 0;
+            _wasWatchActive = Game1.game1.IsActive;
+            _watchClock.Restart();
+            PublishWatchPresence();
+        }
+
+        private void PublishWatchPresence()
+        {
+            if (!_isWatching || !Context.IsWorldReady)
+            {
+                return;
+            }
+
+            string value = $"{_watchDay}|{_watchSlot}|{_watchFirstNpcName}|{_watchSecondNpcName}";
+            Game1.player.modData[WatchPresenceKey] = value;
+            Helper.Multiplayer.SendMessage(value, WatchPresenceMessageType, new[] { ModManifest.UniqueID });
+        }
+
+        private void ClearWatchPresence()
+        {
+            if (Context.IsWorldReady)
+            {
+                Game1.player.modData.Remove(WatchPresenceKey);
+                Helper.Multiplayer.SendMessage(string.Empty, WatchPresenceMessageType, new[] { ModManifest.UniqueID });
+            }
+
+            _isWatching = false;
+            _watchClock.Reset();
+            _watchLastElapsedMilliseconds = 0;
+            _wasWatchActive = false;
+            _watchFirstNpcName = null;
+            _watchSecondNpcName = null;
         }
 
         [EventPriority(EventPriority.High)]
@@ -316,41 +442,89 @@ namespace StardropPoolMinigameRev
             PoolTableSnapshot? snapshot;
             if (isWatchMode)
             {
-                randomSeedDay = GetWatchSeedDay();
-                snapshot = BuildWatchSnapshotForCurrentTime(npcOpponentName, npcPlayerName, tableContext, randomSeedDay.Value);
+                int day = GetWatchSeedDay();
+                int slot = GetWatchTimeSlot();
+                snapshot = GetOrCreateWatchSnapshot(npcPlayerName!, npcOpponentName!, day, slot);
+                randomSeedDay = GetWatchRandomSeed(day, slot, npcPlayerName!, npcOpponentName!);
+                BeginWatchPresence(npcPlayerName!, npcOpponentName!, day, slot);
             }
             else
             {
                 snapshot = IsCurrentTableCompatible(tableContext) ? _saveData.CurrentTable : null;
             }
 
-            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, snapshot, snapshot => SaveCurrentTable(snapshot, tableContext), SavePlayerCueIndex, _saveData.LastPlayerCueIndex, npcOpponentName, npcPlayerName, _profiles, _config, randomSeedDay);
+            Game1.currentMinigame = new StardropPoolMinigameRev(Helper, Monitor, snapshot, watchSnapshot => SaveWatchSnapshot(npcPlayerName!, npcOpponentName!, watchSnapshot), snapshot => SaveCurrentTable(snapshot, tableContext), SavePlayerCueIndex, _saveData.LastPlayerCueIndex, npcOpponentName, npcPlayerName, _profiles, _config, randomSeedDay);
         }
 
-        private PoolTableSnapshot BuildWatchSnapshotForCurrentTime(string? npcOpponentName, string? npcPlayerName, string? tableContext, int randomSeedDay)
+        private PoolTableSnapshot GetOrCreateWatchSnapshot(string firstNpcName, string secondNpcName, int day, int slot)
         {
-            int watchStartMinutes = TimeOfDayToMinutes(1910);
-            bool startsAtWatchBoundary = TimeOfDayToMinutes(Game1.timeOfDay) == watchStartMinutes;
-            bool hasCompatibleSnapshot = !startsAtWatchBoundary && IsCurrentTableCompatible(tableContext) && _saveData.CurrentTable != null;
-            PoolTableSnapshot? snapshot = hasCompatibleSnapshot ? _saveData.CurrentTable : null;
-            int startTime = hasCompatibleSnapshot ? _saveData.CurrentTableTimeOfDay : 0;
-            int startMinutes = Math.Max(TimeOfDayToMinutes(startTime > 0 ? startTime : 1910), watchStartMinutes);
-            int targetMinutes = TimeOfDayToMinutes(Game1.timeOfDay);
-            if (targetMinutes < watchStartMinutes)
+            PoolWatchSession? session = _saveData.WatchSession;
+            if (session != null
+                && session.Day == day
+                && session.TimeSlot == slot
+                && string.Equals(session.FirstNpcName, firstNpcName, StringComparison.Ordinal)
+                && string.Equals(session.SecondNpcName, secondNpcName, StringComparison.Ordinal))
             {
-                targetMinutes += 24 * 60;
+                return session.Snapshot;
             }
 
-            double secondsToSimulate = Math.Max(0, targetMinutes - startMinutes);
+            GameScene scene = new(Monitor, null, IsSveInstalled(), secondNpcName, firstNpcName, _profiles, _config, randomSeedDay: GetWatchRandomSeed(day, slot, firstNpcName, secondNpcName));
+            PoolTableSnapshot snapshot = scene.CreateSnapshot();
+            SaveWatchSnapshot(firstNpcName, secondNpcName, snapshot, day, slot);
+            return snapshot;
+        }
 
-            GameScene scene = new(Monitor, snapshot, IsSveInstalled(), npcOpponentName, npcPlayerName, _profiles, _config, randomSeedDay: randomSeedDay);
-            scene.FastForwardWatch(secondsToSimulate);
-            PoolTableSnapshot result = scene.CreateSnapshot();
-            _saveData.CurrentTable = result;
-            _saveData.CurrentTableDay = GetCurrentDayId();
-            _saveData.CurrentTableOpponentName = tableContext;
-            _saveData.CurrentTableTimeOfDay = Game1.timeOfDay;
-            return result;
+        private void SaveWatchSnapshot(string firstNpcName, string secondNpcName, PoolTableSnapshot snapshot)
+        {
+            SaveWatchSnapshot(firstNpcName, secondNpcName, snapshot, _watchDay, _watchSlot);
+        }
+
+        private void SaveWatchSnapshot(string firstNpcName, string secondNpcName, PoolTableSnapshot snapshot, int day, int slot)
+        {
+            _saveData.WatchSession = new PoolWatchSession
+            {
+                Day = day,
+                TimeSlot = slot,
+                FirstNpcName = firstNpcName,
+                SecondNpcName = secondNpcName,
+                Snapshot = snapshot
+            };
+        }
+
+        private static int GetWatchTimeSlot()
+        {
+            int minutes = TimeOfDayToMinutes(Game1.timeOfDay);
+            if (minutes < TimeOfDayToMinutes(WatchStartTime))
+            {
+                minutes += 24 * 60;
+            }
+
+            return Math.Max(0, (minutes - TimeOfDayToMinutes(WatchStartTime)) / WatchSlotMinutes);
+        }
+
+        private static int GetWatchRandomSeed(int day, int slot, string firstNpcName, string secondNpcName)
+        {
+            unchecked
+            {
+                int seed = day;
+                seed = seed * 397 ^ slot;
+                seed = seed * 397 ^ GetStableNameHash(firstNpcName);
+                return seed * 397 ^ GetStableNameHash(secondNpcName);
+            }
+        }
+
+        private static int GetStableNameHash(string value)
+        {
+            unchecked
+            {
+                int hash = 17;
+                foreach (char character in value)
+                {
+                    hash = hash * 31 + character;
+                }
+
+                return hash;
+            }
         }
 
         private bool IsSveInstalled()

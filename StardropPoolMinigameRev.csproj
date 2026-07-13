@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <EnableModDeploy>true</EnableModDeploy>
+    <EnableModDeploy>false</EnableModDeploy>
     <EnableModZip>false</EnableModZip>
   </PropertyGroup>
 
@@ -33,9 +33,23 @@
     </None>
   </ItemGroup>
 
+  <Target Name="DeployModAllowlist" AfterTargets="AfterBuild">
+    <ItemGroup>
+      <ModDeploymentContent Include="manifest.json;profile.json;i18n/**;Assets/**" />
+    </ItemGroup>
+    <MakeDir Directories="$(GameModsPath)/$(ModFolderName)" />
+    <Copy
+      SourceFiles="$(TargetPath)"
+      DestinationFiles="$(GameModsPath)/$(ModFolderName)/$(TargetName).dll"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(ModDeploymentContent)"
+      DestinationFiles="@(ModDeploymentContent->'$(GameModsPath)/$(ModFolderName)/%(Identity)')"
+      SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="RemoveUnusedTilesheetFallbacks" BeforeTargets="AfterBuild">
     <Delete Files="$(TargetDir)Assets/Tilesheets/stardropPoolFont.png" />
-    <Delete Files="$(GameModsPath)/$(ModFolderName)/Assets/Tilesheets/stardropPoolFont.png" />
   </Target>
 
 </Project>

@@ -11,7 +11,20 @@ namespace StardropPoolMinigameRev.Scenes
 				Shots = _shots,
 				Pocketed = _pocketed,
 				ActivePlayerIndex = _activePlayerIndex,
-				PlayerAssignedBallType = _playerAssignedBallType
+				PlayerAssignedBallType = _playerAssignedBallType,
+				CueRandomState = _cueRandom.State,
+				NpcAiRandomState = _npcAiRandom.State,
+				WatchCatchUpSeconds = _watchCatchUpSeconds,
+				IsMatchEnded = _isMatchEnded,
+				MatchWinnerIndex = _matchWinnerIndex,
+				WatchTimingRandomState = _watchTimingRandom.State,
+				WatchNpcPendingWaitMilliseconds = _watchNpcPendingWaitMilliseconds,
+				CommittedNpcShotDirectionX = _strikeDirection.X,
+				CommittedNpcShotDirectionY = _strikeDirection.Y,
+				CommittedNpcShotPowerRatio = _strikePowerRatio,
+				CommittedNpcShotFitness = _committedNpcShotFitness,
+				CommittedNpcShotExpectedPot = _committedNpcShotExpectedPot,
+				CommittedNpcShotWasGiveUp = _committedNpcShotWasGiveUp
 			};
 
 			for (int i = 0; i < _balls.Count; i++)

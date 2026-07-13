@@ -22,6 +22,7 @@ namespace StardropPoolMinigameRev
         private readonly IMonitor _monitor;
         private readonly MinigameViewport _viewport;
         private readonly Action<PoolTableSnapshot> _saveSnapshot;
+        private readonly Action<PoolTableSnapshot>? _saveWatchSnapshot;
         private readonly Action<int> _savePlayerCueIndex;
         private readonly int _lastPlayerCueIndex;
         private readonly bool _isSveInstalled;
@@ -40,9 +41,10 @@ namespace StardropPoolMinigameRev
         private Vector2 _lastRawLogical = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
         private Vector2 _capturedLogicalMouse = new(MinigameViewport.LogicalWidth / 2f, MinigameViewport.LogicalHeight / 2f);
 
-        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot> saveSnapshot, Action<int> savePlayerCueIndex, int lastPlayerCueIndex, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null, ModConfig? config = null, int? randomSeedDay = null)
+        public StardropPoolMinigameRev(IModHelper helper, IMonitor monitor, PoolTableSnapshot? snapshot, Action<PoolTableSnapshot>? saveWatchSnapshot, Action<PoolTableSnapshot> saveSnapshot, Action<int> savePlayerCueIndex, int lastPlayerCueIndex, string? npcOpponentName = null, string? npcPlayerName = null, PoolNpcProfiles? profiles = null, ModConfig? config = null, int? randomSeedDay = null)
         {
             _monitor = monitor;
+            _saveWatchSnapshot = saveWatchSnapshot;
             _saveSnapshot = saveSnapshot;
             _savePlayerCueIndex = savePlayerCueIndex;
             _lastPlayerCueIndex = lastPlayerCueIndex;
@@ -76,7 +78,17 @@ namespace StardropPoolMinigameRev
             _viewport.Update();
             UpdateCapturedMouse();
             UpdateActiveMenu(time);
-            _scene.Update(time);
+            if (Game1.game1.IsActive || !IsWatchMode())
+            {
+                if (IsWatchMode() && _scene is GameScene gameScene && gameScene.IsWatchCatchUpPending)
+                {
+                    gameScene.ProcessWatchCatchUp(time.ElapsedGameTime.TotalSeconds);
+                }
+                else
+                {
+                    _scene.Update(time);
+                }
+            }
 
             if (_scene.PendingTransition != SceneId.None)
             {
@@ -89,6 +101,14 @@ namespace StardropPoolMinigameRev
         private bool IsWatchMode()
         {
             return !string.IsNullOrWhiteSpace(_npcPlayerName) && !string.IsNullOrWhiteSpace(_npcOpponentName);
+        }
+
+        public void FastForwardWatch(double seconds)
+        {
+            if (IsWatchMode() && _scene is GameScene gameScene && seconds > 0)
+            {
+                gameScene.FastForwardWatch(seconds);
+            }
         }
 
         private void TransitionTo(SceneId target)
@@ -107,6 +127,11 @@ namespace StardropPoolMinigameRev
 
         public void draw(SpriteBatch batch)
         {
+            if (_scene is GameScene gameScene && gameScene.IsWatchCatchUpPending)
+            {
+                return;
+            }
+
             DrawRawFloorBackground(batch);
 
             batch.Begin(
@@ -403,9 +428,17 @@ namespace StardropPoolMinigameRev
             if (_scene is GameScene gameScene)
             {
                 gameScene.SettleBalls();
+
                 PoolTableSnapshot snapshot = gameScene.CreateSnapshot();
                 _currentSnapshot = snapshot;
-                _saveSnapshot(snapshot);
+                if (IsWatchMode())
+                {
+                    _saveWatchSnapshot?.Invoke(snapshot);
+                }
+                else
+                {
+                    _saveSnapshot(snapshot);
+                }
             }
         }
 
