@@ -8,7 +8,7 @@
 "menu.start": "開始",
 "menu.quit": "終了",
 "config.interaction-mode.name": "ビリヤード台の操作",
-"config.interaction-mode.tooltip": "スタードロップサルーンのビリヤード台を調べたときの動作を選びます。",
+"config.interaction-mode.tooltip": "ビリヤード台を調べたときの動作を選びます。",
 "config.interaction-mode.default": "デフォルト",
 "config.interaction-mode.always-solo": "常にひとりで遊ぶ",
 "config.interaction-mode.always-vs-npc": "常にNPCと対戦(ランダム)",
