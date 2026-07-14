@@ -5,7 +5,7 @@
 <p align="center">A playable 8-ball minigame for the pool table in Stardrop Saloon.</p>
 
 <p align="center">
-  <a href="https://github.com/andyruwruw/stardew-valley-stardrop-pool-minigame">Original Mod</a> · <a href="#">Download</a> · <a href="../../issues">Issues</a>
+  <a href="https://github.com/andyruwruw/stardew-valley-stardrop-pool-minigame">Original Repo</a> · <a href="#">Download</a> · <a href="../../issues">Issues</a>
 </p>
 
 # Stardrop Pool Minigame Rev
