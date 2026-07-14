@@ -8,7 +8,7 @@
   "menu.start": "Start",
   "menu.quit": "Quit",
   "config.interaction-mode.name": "Default table interaction mode",
-  "config.interaction-mode.tooltip": "Choose what happens when you interact with pool table.",
+  "config.interaction-mode.tooltip": "Choose what happens when you interact with the pool table.",
   "config.interaction-mode.default": "Default pool table interaction",
   "config.interaction-mode.always-solo": "Always solo",
   "config.interaction-mode.always-vs-npc": "Always vs NPC (random person)",
