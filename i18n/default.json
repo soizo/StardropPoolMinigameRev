@@ -16,7 +16,7 @@
   "config.emote-eight-appearance.name": "Eye emote appearance",
   "config.emote-eight-appearance.tooltip": "Choose which eye emote art is used when emote 8 is shown.",
   "config.emote-eight-appearance.default": "Default",
-  "config.emote-eight-appearance.big-eyes": "Big eyes",
-  "config.emote-eight-appearance.small-eyes": "Small eyes",
+  "config.emote-eight-appearance.big-eyes": "OwO Emote (Big eyes)",
+  "config.emote-eight-appearance.small-eyes": "OwO Emote (Small eyes)",
   "presence.watching-pool": "Watching pool"
 }

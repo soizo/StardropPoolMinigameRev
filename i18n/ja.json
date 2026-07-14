@@ -1,0 +1,22 @@
+{
+"menu.question": "何をする？",
+"menu.watch": "プレイを見る",
+"menu.play-solo": "ひとりで遊ぶ",
+"menu.play-against": "{{npcName}}と対戦",
+"menu.invite": "{{npcName}}を誘う",
+"menu.leave": "離れる",
+"menu.start": "開始",
+"menu.quit": "終了",
+"config.interaction-mode.name": "ビリヤード台の操作",
+"config.interaction-mode.tooltip": "スタードロップサルーンのビリヤード台を調べたときの動作を選びます。",
+"config.interaction-mode.default": "デフォルト",
+"config.interaction-mode.always-solo": "常にひとりで遊ぶ",
+"config.interaction-mode.always-vs-npc": "常にNPCと対戦(ランダム)",
+"config.interaction-mode.always-watch": "常に観戦(ランダム)",
+"config.emote-eight-appearance.name": "目のエモート",
+"config.emote-eight-appearance.tooltip": "エモート8に使う目の絵柄を選びます。",
+"config.emote-eight-appearance.default": "デフォルト",
+"config.emote-eight-appearance.big-eyes": "OwOエモート(大きな目)",
+"config.emote-eight-appearance.small-eyes": "OwOエモート(小さな目)",
+"presence.watching-pool": "ビリヤード観戦中"
+}

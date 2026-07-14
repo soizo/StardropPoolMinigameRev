@@ -1,0 +1,22 @@
+{
+"menu.question": "Nak buat apa?",
+"menu.watch": "Tonton mereka bermain",
+"menu.play-solo": "Main sendiri",
+"menu.play-against": "Lawan {{npcName}}",
+"menu.invite": "Ajak {{npcName}}",
+"menu.leave": "Pergi",
+"menu.start": "Mula",
+"menu.quit": "Keluar",
+"config.interaction-mode.name": "Interaksi meja biliard",
+"config.interaction-mode.tooltip": "Pilih tindakan apabila berinteraksi dengan meja biliard di Salun Stardrop.",
+"config.interaction-mode.default": "Lalai",
+"config.interaction-mode.always-solo": "Sentiasa main sendiri",
+"config.interaction-mode.always-vs-npc": "Sentiasa lawan NPC (rawak)",
+"config.interaction-mode.always-watch": "Sentiasa menonton (rawak)",
+"config.emote-eight-appearance.name": "Gaya mata emote",
+"config.emote-eight-appearance.tooltip": "Pilih gaya mata untuk emote 8.",
+"config.emote-eight-appearance.default": "Lalai",
+"config.emote-eight-appearance.big-eyes": "Emote OwO (mata besar)",
+"config.emote-eight-appearance.small-eyes": "Emote OwO (mata kecil)",
+"presence.watching-pool": "Sedang menonton biliard"
+}

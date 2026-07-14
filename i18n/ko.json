@@ -1,0 +1,22 @@
+{
+"menu.question": "뭘 할까?",
+"menu.watch": "플레이 구경하기",
+"menu.play-solo": "혼자 하기",
+"menu.play-against": "{{npcName}}와 대결",
+"menu.invite": "{{npcName}} 초대하기",
+"menu.leave": "떠나기",
+"menu.start": "시작",
+"menu.quit": "종료",
+"config.interaction-mode.name": "당구대 상호작용",
+"config.interaction-mode.tooltip": "스타드롭 주점의 당구대와 상호작용할 때의 동작을 선택합니다.",
+"config.interaction-mode.default": "기본",
+"config.interaction-mode.always-solo": "항상 혼자 하기",
+"config.interaction-mode.always-vs-npc": "항상 NPC와 대결 (무작위)",
+"config.interaction-mode.always-watch": "항상 관전 (무작위)",
+"config.emote-eight-appearance.name": "눈 이모티콘",
+"config.emote-eight-appearance.tooltip": "이모티콘 8에 사용할 눈 모양을 선택합니다.",
+"config.emote-eight-appearance.default": "기본",
+"config.emote-eight-appearance.big-eyes": "OwO 이모티콘 (큰 눈)",
+"config.emote-eight-appearance.small-eyes": "OwO 이모티콘 (작은 눈)",
+"presence.watching-pool": "당구 관전 중"
+}

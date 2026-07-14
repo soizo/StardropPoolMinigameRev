@@ -1,0 +1,22 @@
+{
+"menu.question": "What would you like to do?",
+"menu.watch": "Watch them play",
+"menu.play-solo": "Play solo",
+"menu.play-against": "Play against {{npcName}}",
+"menu.invite": "Invite {{npcName}}",
+"menu.leave": "Leave",
+"menu.start": "Start",
+"menu.quit": "Quit",
+"config.interaction-mode.name": "Default pool table interaction",
+"config.interaction-mode.tooltip": "Choose what happens when you interact with the pool table in the Stardrop Saloon.",
+"config.interaction-mode.default": "Default interaction",
+"config.interaction-mode.always-solo": "Always play solo",
+"config.interaction-mode.always-vs-npc": "Always play against an NPC (random)",
+"config.interaction-mode.always-watch": "Always watch (random players)",
+"config.emote-eight-appearance.name": "Eye emote style",
+"config.emote-eight-appearance.tooltip": "Choose the eye art used for emote 8.",
+"config.emote-eight-appearance.default": "Default",
+"config.emote-eight-appearance.big-eyes": "OwO emote (big eyes)",
+"config.emote-eight-appearance.small-eyes": "OwO emote (small eyes)",
+"presence.watching-pool": "Watching pool"
+}

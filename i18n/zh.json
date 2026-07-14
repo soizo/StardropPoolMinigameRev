@@ -1,0 +1,22 @@
+{
+"menu.question": "你想做什么？",
+"menu.watch": "看他们打球",
+"menu.play-solo": "自己打球",
+"menu.play-against": "和{{npcName}}对战",
+"menu.invite": "邀请{{npcName}}",
+"menu.leave": "离开",
+"menu.start": "开始",
+"menu.quit": "退出",
+"config.interaction-mode.name": "台球桌默认互动方式",
+"config.interaction-mode.tooltip": "选择与星之果实餐吧的台球桌互动时会发生什么。",
+"config.interaction-mode.default": "默认台球桌互动",
+"config.interaction-mode.always-solo": "总是自己打球",
+"config.interaction-mode.always-vs-npc": "总是和 NPC 对战(随机人物)",
+"config.interaction-mode.always-watch": "总是旁观(随机人物)",
+"config.emote-eight-appearance.name": "眼睛表情样式",
+"config.emote-eight-appearance.tooltip": "选择显示 8 号表情时使用的眼睛图案。",
+"config.emote-eight-appearance.default": "默认",
+"config.emote-eight-appearance.big-eyes": "OwO 表情(大眼睛)",
+"config.emote-eight-appearance.small-eyes": "OwO 表情(小眼睛)",
+"presence.watching-pool": "正在看别人打台球"
+}
