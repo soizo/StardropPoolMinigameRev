@@ -5,7 +5,7 @@
 <p align="center">A playable 8-ball minigame for the pool table in Stardrop Saloon.</p>
 
 <p align="center">
-  <a href="https://github.com/andyruwruw/stardew-valley-stardrop-pool-minigame">Original Repo</a> · <a href="#">Download</a> · <a href="https://github.com/soizo/StardropPoolMinigameRev/issues">Issues</a>
+  <a href="https://github.com/andyruwruw/stardew-valley-stardrop-pool-minigame">Original Repo</a> · <a href="https://www.nexusmods.com/stardewvalley/mods/49140">Nexus</a> · <a href="https://github.com/soizo/StardropPoolMinigameRev/issues">Issues</a>
 </p>
 
 # Stardrop Pool Minigame Rev
@@ -27,7 +27,7 @@ Controller support, keyboard-only play, and Farmer-versus-Farmer multiplayer are
 
 ## Installation
 
-Place the `StardropPoolMinigameRev` mod folder in Stardew Valley's `Mods` folder.
+Download the latest release from [Nexus Mods](https://www.nexusmods.com/stardewvalley/mods/49140), then extract the `StardropPoolMinigameRev` folder into Stardew Valley's `Mods` folder.
 
 ## Building
 
