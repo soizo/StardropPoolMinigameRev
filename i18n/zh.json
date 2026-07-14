@@ -8,7 +8,7 @@
 "menu.start": "开始",
 "menu.quit": "退出",
 "config.interaction-mode.name": "台球桌默认互动方式",
-"config.interaction-mode.tooltip": "选择与星之果实餐吧的台球桌互动时会发生什么。",
+"config.interaction-mode.tooltip": "选择与台球桌互动时会发生什么。",
 "config.interaction-mode.default": "默认台球桌互动",
 "config.interaction-mode.always-solo": "总是自己打球",
 "config.interaction-mode.always-vs-npc": "总是和 NPC 对战(随机人物)",
