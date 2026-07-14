@@ -36,14 +36,6 @@ The mod targets Stardew Valley 1.6, SMAPI 4.x and .NET 6. Its DLL unique ID is `
 &nbsp;
 &nbsp;
 
-<p align="center">
-  <img src="documentation/images/banner.gif" alt="A pool match at the Stardrop Saloon">
-</p>
-
-<p align="center">
-  Play a focused game of 8-ball at the Stardrop Saloon.
-</p>
-
 # Current features
 
 - Classic 8-ball matches with solids, stripes, the cue ball and the 8-ball.
@@ -92,14 +84,6 @@ NPC profiles are loaded from the mod's `profile.json` and normalised for the fou
 &nbsp;
 &nbsp;
 &nbsp;
-
-<p align="center">
-  <img src="documentation/images/banner.gif" alt="Stardrop Pool Minigame Rev">
-</p>
-
-<p align="center">
-  Install the mod, then build on its current 8-ball foundation.
-</p>
 
 # Installation
 
